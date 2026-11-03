@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable, Iterator
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,6 +14,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pydriller import Commit, Repository
 
+from commitrad.parallel import map_repos
 from commitrad.repos import ensure_clone, repo_slug
 
 SCHEMA = pa.schema(
@@ -83,14 +84,17 @@ def iter_records(repo_path: Path) -> Iterator[dict[str, Any]]:
         yield commit_to_record(commit)
 
 
-def write_parquet(records: Iterable[dict[str, Any]], path: Path) -> int:
-    """Write rows atomically (temp file + rename) and return the row count."""
-    table = pa.Table.from_pylist(list(records), schema=SCHEMA)
+def write_table(table: pa.Table, path: Path) -> int:
+    """Write a table atomically (temp file + rename) and return its row count."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     pq.write_table(table, tmp)
     os.replace(tmp, path)
     return table.num_rows
+
+
+def write_parquet(records: Iterable[dict[str, Any]], path: Path) -> int:
+    return write_table(pa.Table.from_pylist(list(records), schema=SCHEMA), path)
 
 
 def mine_repo(source: str, out_dir: Path, clone_dir: Path, force: bool = False) -> MineResult:
@@ -115,11 +119,5 @@ def mine_repos(
     force: bool = False,
 ) -> list[MineResult]:
     """Mine repos in parallel; results come back in input order."""
-    if workers <= 1:
-        return [mine_repo(s, out_dir, clone_dir, force) for s in sources]
-    by_source: dict[str, MineResult] = {}
-    with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(mine_repo, s, out_dir, clone_dir, force): s for s in sources}
-        for fut in as_completed(futures):
-            by_source[futures[fut]] = fut.result()
-    return [by_source[s] for s in sources]
+    job = partial(mine_repo, out_dir=out_dir, clone_dir=clone_dir, force=force)
+    return map_repos(job, sources, workers)
