@@ -7,7 +7,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from frames import planted_features
 from gitrepo import GitRepo
+
+from commitrad.model import run_training, save_model
 
 
 @pytest.fixture
@@ -22,3 +25,11 @@ def small_repo(tmp_path: Path) -> GitRepo:
     repo.remove("README.md")
     repo.commit("drop readme", "2024-01-06T12:00:00+00:00")
     return repo
+
+
+@pytest.fixture(scope="session")
+def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A small model trained once per session on synthetic features."""
+    model_dir = tmp_path_factory.mktemp("model")
+    save_model(run_training(planted_features(), "strict", n_seeds=1), model_dir)
+    return model_dir

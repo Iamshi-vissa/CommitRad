@@ -70,3 +70,16 @@ def random_history(n: int = 300, seed: int = 0) -> pd.DataFrame:
             )
         )
     return frame(rows)
+
+
+def planted_features(n: int = 900, seed: int = 3) -> pd.DataFrame:
+    """Feature table with a planted signal: large diffs are usually bug-introducing."""
+    from commitrad.features import build_features
+    from commitrad.sentiment import LexiconSentiment
+
+    df = build_features(random_history(n=n, seed=seed), LexiconSentiment(), "synthetic")
+    rng = np.random.default_rng(0)
+    risky = (df["lines_added"] > 70) | (rng.random(len(df)) < 0.03)
+    df["is_bug_introducing"] = risky
+    df["bug_found_at"] = df["timestamp"].where(risky) + pd.Timedelta(days=3)
+    return df

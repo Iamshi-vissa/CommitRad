@@ -131,3 +131,14 @@ def test_duckdb_replace_is_per_repo(tmp_path: Path) -> None:
 def test_read_table_rejects_unknown_table(tmp_path: Path) -> None:
     with connect(tmp_path / "t.duckdb") as con, pytest.raises(ValueError):
         read_table(con, "users; DROP TABLE strain")
+
+
+def test_bots_are_excluded_from_strain() -> None:
+    df = commits(
+        [
+            {"t": "2024-01-01T10:00:00Z"},
+            {"t": "2024-01-01T11:00:00Z", "author": "dependabot[bot]",
+             "author_email": "49699333+dependabot[bot]@users.noreply.github.com"},
+        ]
+    )  # fmt: skip
+    assert weekly_strain(df)["author"].tolist() == ["Alice"]
