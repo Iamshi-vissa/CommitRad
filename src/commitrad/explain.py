@@ -25,7 +25,7 @@ def _hours(h: float) -> str:
     return f"{h / 24:.0f} days"
 
 
-def describe_value(feature: str, value: float) -> str:
+def describe_value(feature: str, value: float | None) -> str:
     """What the feature value *is*, in words (no judgment about risk)."""
     if value is None or (isinstance(value, float) and math.isnan(value)):
         if feature == "hours_since_prev_commit":
@@ -43,7 +43,11 @@ def describe_value(feature: str, value: float) -> str:
         "files_touched": lambda: f"touches {_plural(v, 'file')}",
         "file_churn_max": lambda: f"edits a file with {_plural(v, 'line')} of prior churn",
         "file_churn_mean": lambda: f"touched files average {_plural(v, 'line')} of prior churn",
-        "author_prior_commits": lambda: f"author had {_plural(v, 'earlier commit')} here",
+        "author_prior_commits": lambda: (
+            "author's first commit in this repo"
+            if v == 0
+            else f"author had {_plural(v, 'earlier commit')} here"
+        ),
         "author_commit_rate_30d": lambda: f"author made {v * 30:.0f} commits in the prior 30 days",
         "author_past_bug_rate": lambda: f"{v:.0%} of the author's past commits were later fixed",
         "msg_length": lambda: f"commit message is {_plural(v, 'character')} long",
@@ -66,7 +70,7 @@ def describe_value(feature: str, value: float) -> str:
     return phrases.get(feature, lambda: f"{feature} = {v:g}")()
 
 
-def reason(feature: str, value: float, shap: float) -> dict[str, Any]:
+def reason(feature: str, value: float | None, shap: float) -> dict[str, Any]:
     effect = "raises" if shap > 0 else "lowers"
     return {
         "feature": feature,

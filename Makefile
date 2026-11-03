@@ -1,4 +1,4 @@
-.PHONY: setup test lint format demo
+.PHONY: setup test lint format demo precache serve dashboard
 
 setup:
 	uv sync
@@ -20,3 +20,12 @@ demo:
 	uv run commitrad features repos.txt
 	uv run commitrad train
 	uv run commitrad strain
+
+precache:
+	uv run commitrad precache https://github.com/pallets/flask https://github.com/psf/requests https://github.com/pallets/click
+
+serve:
+	uv run commitrad serve
+
+dashboard:
+	uv run commitrad dashboard

@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
     strain.add_argument("--config", type=Path, default=DEFAULT_STRAIN_CONFIG)
     strain.add_argument("--db", type=Path, default=DEFAULT_DB)
 
+    pre = sub.add_parser("precache", help="Pre-compute dashboard snapshots for demo repos.")
+    pre.add_argument(
+        "urls", nargs="+", help="HTTPS repo URLs, e.g. https://github.com/pallets/flask"
+    )
+    pre.add_argument("--out", type=Path, default=Path("demo_cache"))
+
+    dash = sub.add_parser("dashboard", help="Launch the Streamlit dashboard.")
+    dash.add_argument("--port", type=int, default=8501)
+
     serve = sub.add_parser("serve", help="Run the HTTP API (GET /analyze?repo=URL).")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -163,6 +172,27 @@ def cmd_strain(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_precache(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from commitrad.analyze import Settings, analyze_repo, save_snapshot
+
+    settings = replace(Settings(), timeout_seconds=float("inf"), max_commits=50_000)
+    for url in args.urls:
+        result = analyze_repo(url, settings)
+        path = save_snapshot(result, args.out)
+        print(f"{result['slug']:<28} commits={result['n_commits']:<6} -> {path}")
+    return 0
+
+
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    import subprocess
+
+    app = Path(__file__).with_name("dashboard.py")
+    cmd = ["streamlit", "run", str(app), "--server.port", str(args.port)]
+    return subprocess.call([sys.executable, "-m", *cmd])
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -195,6 +225,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_strain(args)
         if args.command == "serve":
             return cmd_serve(args)
+        if args.command == "precache":
+            return cmd_precache(args)
+        if args.command == "dashboard":
+            return cmd_dashboard(args)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
