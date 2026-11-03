@@ -40,7 +40,12 @@ def read_repo_list(path: Path) -> list[str]:
     return list(seen)
 
 
-def ensure_clone(source: str, clone_dir: Path, timeout: float | None = None) -> Path:
+def ensure_clone(
+    source: str,
+    clone_dir: Path,
+    timeout: float | None = None,
+    git_config: list[str] | None = None,
+) -> Path:
     """Return a local checkout for ``source``, cloning into ``clone_dir`` if needed.
 
     Local directories are used in place. Clones go to a temp dir first and are
@@ -55,7 +60,7 @@ def ensure_clone(source: str, clone_dir: Path, timeout: float | None = None) -> 
     tmp = Path(tempfile.mkdtemp(prefix=f".{target.name}-", dir=clone_dir))
     try:
         subprocess.run(
-            ["git", "clone", "--quiet", source, str(tmp)],
+            ["git", *(git_config or []), "clone", "--quiet", source, str(tmp)],
             check=True,
             capture_output=True,
             text=True,
