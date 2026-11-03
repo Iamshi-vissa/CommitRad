@@ -7,7 +7,12 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "pydriller>=2.6",
     "pyarrow>=15",
+    "pandas>=2.2",
 ]
+
+[project.optional-dependencies]
+# Transformer sentiment (falls back to a built-in lexicon when unavailable).
+sentiment = ["transformers>=4.40", "torch>=2.2"]
 
 [project.scripts]
 commitrad = "commitrad.cli:main"
@@ -28,6 +33,7 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ANN", "RUF"]
+ignore = ["SIM905"]  # "a b c".split() reads better than long literal lists for vocabularies
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

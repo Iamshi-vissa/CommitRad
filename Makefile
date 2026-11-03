@@ -17,3 +17,4 @@ format:
 demo:
 	uv run commitrad mine repos.txt
 	uv run commitrad label repos.txt
+	uv run commitrad features repos.txt
