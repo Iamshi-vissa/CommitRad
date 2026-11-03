@@ -25,22 +25,40 @@ from commitrad.mining import write_table
 from commitrad.parallel import map_repos
 from commitrad.repos import repo_slug
 from commitrad.sentiment import Backend, SentimentScorer, get_scorer
+from commitrad.workflow import has_coauthor, is_config_path, is_revert, is_test_path
 
 NIGHT_START_HOUR, NIGHT_END_HOUR = 22, 6
 WINDOW_DAYS = 30
 SECONDS_PER_DAY = 86_400
 
 TIME_FEATURES = ["hour", "weekday", "is_night", "is_weekend", "hours_since_prev_commit"]
-DIFF_FEATURES = [
-    "lines_added",
-    "lines_deleted",
-    "files_touched",
-    "file_churn_max",
-    "file_churn_mean",
+DIFF_FEATURES = ["lines_added", "lines_deleted", "files_touched", "dirs_touched", "change_entropy"]
+# Kamei et al. (2013) history features, computed from strictly earlier commits only.
+HISTORY_FEATURES = ["file_churn_max", "file_churn_mean", "file_prior_authors", "file_age_days"]
+# How the change landed and what it touches (git-derived "GitHub workflow" signals).
+WORKFLOW_FEATURES = [
+    "via_pr",
+    "pr_size",
+    "test_file_share",
+    "touches_config",
+    "is_revert",
+    "has_coauthor",
 ]
-AUTHOR_FEATURES = ["author_prior_commits", "author_commit_rate_30d", "author_past_bug_rate"]
+AUTHOR_FEATURES = [
+    "author_prior_commits",
+    "author_tenure_days",
+    "author_commit_rate_30d",
+    "author_past_bug_rate",
+]
 MESSAGE_FEATURES = ["msg_length", "msg_word_count", "msg_vagueness", "msg_sentiment"]
-FEATURE_COLUMNS = TIME_FEATURES + DIFF_FEATURES + AUTHOR_FEATURES + MESSAGE_FEATURES
+FEATURE_COLUMNS = (
+    TIME_FEATURES
+    + DIFF_FEATURES
+    + HISTORY_FEATURES
+    + WORKFLOW_FEATURES
+    + AUTHOR_FEATURES
+    + MESSAGE_FEATURES
+)
 META_COLUMNS = [
     "repo",
     "hash",
@@ -117,9 +135,12 @@ def _author_block(t: np.ndarray, found: np.ndarray) -> dict[str, np.ndarray]:
     known = (tb[None, :] < t[:, None]) & (fb[None, :] < t[:, None])
     past_bugs = known.sum(axis=1)
     bug_rate = np.divide(past_bugs, prior, out=np.zeros(len(t)), where=prior > 0)
+    first = t[0] if len(t) else 0.0
+    tenure = np.where(prior > 0, (t - first) / SECONDS_PER_DAY, 0.0)
     return {
         "hours_since_prev_commit": hours_since,
         "author_prior_commits": prior.astype(float),
+        "author_tenure_days": tenure,
         "author_commit_rate_30d": (prior - window_start) / WINDOW_DAYS,
         "author_past_bug_rate": bug_rate,
     }
@@ -142,46 +163,109 @@ def author_history_features(df: pd.DataFrame) -> pd.DataFrame:
 # --- diff / churn --------------------------------------------------------------------------
 
 
-def file_churn_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Prior added+deleted lines of each touched file (max/mean). Requires time-sorted ``df``.
+def file_history_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Per touched file, from strictly earlier commits: churn, distinct authors, age.
 
-    Commits sharing a timestamp are scored before any of them updates the running totals.
+    * ``file_churn_max`` / ``file_churn_mean``: prior added+deleted lines of the files.
+    * ``file_prior_authors`` (NDEV): distinct earlier authors across the touched files.
+    * ``file_age_days`` (AGE): mean days since each touched file last changed (new files
+      count as 0).
+
+    Requires time-sorted ``df``; commits sharing a timestamp are all scored before any of
+    them updates the running state.
     """
     churn: dict[str, int] = defaultdict(int)
-    max_out = np.zeros(len(df))
-    mean_out = np.zeros(len(df))
+    authors: dict[str, set[str]] = defaultdict(set)
+    last_change: dict[str, float] = {}
+    n = len(df)
+    out = {c: np.zeros(n) for c in HISTORY_FEATURES}
     paths, added, deleted = (
         df["modified_files"].tolist(),
         df["file_lines_added"].tolist(),
         df["file_lines_deleted"].tolist(),
     )
+    who = author_key(df).tolist()
     t = epoch_seconds(df["timestamp"])
     start = 0
-    while start < len(df):
+    while start < n:
         end = start
-        while end < len(df) and t[end] == t[start]:
+        while end < n and t[end] == t[start]:
             end += 1
         for i in range(start, end):
-            prior = [churn[p] for p in paths[i]]
-            if prior:
-                max_out[i], mean_out[i] = max(prior), sum(prior) / len(prior)
+            files = list(paths[i])
+            if not files:
+                continue
+            prior = [churn[p] for p in files]
+            out["file_churn_max"][i], out["file_churn_mean"][i] = (
+                max(prior),
+                sum(prior) / len(prior),
+            )
+            out["file_prior_authors"][i] = len(set().union(*(authors[p] for p in files)))
+            ages = [
+                (t[i] - last_change[p]) / SECONDS_PER_DAY if p in last_change else 0.0
+                for p in files
+            ]
+            out["file_age_days"][i] = sum(ages) / len(ages)
         for i in range(start, end):
             for p, a, d in zip(paths[i], added[i], deleted[i], strict=True):
                 churn[p] += int(a) + int(d)
+                authors[p].add(who[i])
+                last_change[p] = t[i]
         start = end
-    return pd.DataFrame({"file_churn_max": max_out, "file_churn_mean": mean_out}, index=df.index)
+    return pd.DataFrame(out, index=df.index)
+
+
+def change_entropy(lines: Sequence[int]) -> float:
+    """Normalised Shannon entropy of how a change's lines spread over its files (0..1)."""
+    total = sum(lines)
+    if len(lines) < 2 or total <= 0:
+        return 0.0
+    p = np.asarray([x / total for x in lines if x > 0])
+    return float(-(p * np.log2(p)).sum() / np.log2(len(lines)))
+
+
+def top_dir(path: str) -> str:
+    parts = path.split("/")
+    return parts[0] if len(parts) > 1 else "."
 
 
 def diff_features(df: pd.DataFrame) -> pd.DataFrame:
+    lines = [
+        [int(a) + int(d) for a, d in zip(fa, fd, strict=True)]
+        for fa, fd in zip(df["file_lines_added"], df["file_lines_deleted"], strict=True)
+    ]
     base = pd.DataFrame(
         {
             "lines_added": df["lines_added"],
             "lines_deleted": df["lines_deleted"],
             "files_touched": df["files_changed"],
+            "dirs_touched": [len({top_dir(p) for p in ps}) for ps in df["modified_files"]],
+            "change_entropy": [change_entropy(ls) for ls in lines],
         },
         index=df.index,
     )
-    return base.join(file_churn_features(df))
+    return base.join(file_history_features(df))
+
+
+def workflow_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Row-local signals about how the change landed and what kind of files it touches."""
+    files = df["modified_files"].tolist()
+    messages = df["message"].fillna("").tolist()
+    via_pr = df["via_pr"] if "via_pr" in df else pd.Series(0, index=df.index)
+    pr_size = df["pr_size"] if "pr_size" in df else pd.Series(0, index=df.index)
+    return pd.DataFrame(
+        {
+            "via_pr": via_pr.fillna(0).astype(int),
+            "pr_size": pr_size.fillna(0).astype(int),
+            "test_file_share": [
+                sum(is_test_path(p) for p in fs) / len(fs) if len(fs) else 0.0 for fs in files
+            ],
+            "touches_config": [int(any(is_config_path(p) for p in fs)) for fs in files],
+            "is_revert": [int(is_revert(m)) for m in messages],
+            "has_coauthor": [int(has_coauthor(m)) for m in messages],
+        },
+        index=df.index,
+    )
 
 
 # --- message -------------------------------------------------------------------------------
@@ -218,8 +302,10 @@ def build_features(labeled: pd.DataFrame, scorer: SentimentScorer, repo: str) ->
     df = sort_chronologically(labeled[~labeled["is_merge"]])
     msg = message_features(df["message"].tolist(), scorer).set_axis(df.index)
     feats = pd.concat(
-        [time_features(df), author_history_features(df), diff_features(df), msg], axis=1
-    )
+        [time_features(df), author_history_features(df), diff_features(df),
+         workflow_features(df), msg],
+        axis=1,
+    )  # fmt: skip
     meta = df.reindex(columns=[c for c in META_COLUMNS if c != "repo"]).assign(repo=repo)
     target = df[TARGET].astype(bool) if TARGET in df else pd.Series(False, index=df.index)
     return pd.concat([meta[META_COLUMNS], feats[FEATURE_COLUMNS], target.rename(TARGET)], axis=1)

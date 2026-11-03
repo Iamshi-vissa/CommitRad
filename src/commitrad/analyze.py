@@ -16,11 +16,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 import pandas as pd
-import pyarrow as pa
 
 from commitrad.explain import explain_frame
 from commitrad.features import FEATURE_COLUMNS, build_features
-from commitrad.mining import SCHEMA, iter_records
+from commitrad.mining import mine_table
 from commitrad.model import RiskModel, load_model
 from commitrad.pipeline import score_commits
 from commitrad.repos import ensure_clone, repo_slug
@@ -154,7 +153,7 @@ def strain_payload(strain: pd.DataFrame) -> list[dict[str, Any]]:
 
 def run_pipeline(source: str, repo: Path, head: str, settings: Settings) -> dict[str, Any]:
     slug = repo_slug(source)
-    raw = pa.Table.from_pylist(list(iter_records(repo)), schema=SCHEMA)
+    raw = mine_table(repo)
     labeled = label_table(raw, repo).to_pandas()
     features = build_features(labeled, get_scorer(settings.sentiment), slug)
     if features.empty:

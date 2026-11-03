@@ -16,6 +16,7 @@ from pydriller import Commit, Repository
 
 from commitrad.parallel import map_repos
 from commitrad.repos import ensure_clone, repo_slug
+from commitrad.workflow import pr_membership, workflow_columns
 
 SCHEMA = pa.schema(
     [
@@ -33,6 +34,8 @@ SCHEMA = pa.schema(
         ("modified_files", pa.list_(pa.string())),
         ("file_lines_added", pa.list_(pa.int64())),
         ("file_lines_deleted", pa.list_(pa.int64())),
+        ("via_pr", pa.int8()),
+        ("pr_size", pa.int32()),
     ]
 )
 
@@ -97,6 +100,16 @@ def write_parquet(records: Iterable[dict[str, Any]], path: Path) -> int:
     return write_table(pa.Table.from_pylist(list(records), schema=SCHEMA), path)
 
 
+def mine_table(repo_path: Path) -> pa.Table:
+    """All commits of ``repo_path`` as a table matching ``SCHEMA``, incl. PR workflow columns."""
+    records = list(iter_records(repo_path))
+    members = pr_membership(repo_path) if records else {}
+    cols = workflow_columns([r["hash"] for r in records], [r["message"] for r in records], members)
+    for i, r in enumerate(records):
+        r["via_pr"], r["pr_size"] = cols["via_pr"][i], cols["pr_size"][i]
+    return pa.Table.from_pylist(records, schema=SCHEMA)
+
+
 def mine_repo(source: str, out_dir: Path, clone_dir: Path, force: bool = False) -> MineResult:
     """Mine one repo. Skips if its Parquet already exists (unless ``force``)."""
     slug = repo_slug(source)
@@ -105,7 +118,7 @@ def mine_repo(source: str, out_dir: Path, clone_dir: Path, force: bool = False) 
         return MineResult(source, slug, "skipped", pq.read_metadata(out).num_rows, out)
     try:
         repo_path = ensure_clone(source, clone_dir)
-        n = write_parquet(iter_records(repo_path), out)
+        n = write_table(mine_table(repo_path), out)
     except Exception as exc:  # report per-repo failures, keep the batch going
         return MineResult(source, slug, "failed", error=f"{type(exc).__name__}: {exc}")
     return MineResult(source, slug, "mined", n, out)
