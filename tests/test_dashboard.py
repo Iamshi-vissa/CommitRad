@@ -323,3 +323,25 @@ def test_dashboard_rejects_bad_url(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     at.text_input[0].input("http://evil.example.com/x/y").run()
     assert not at.exception
     assert "Invalid repository URL" in at.error[0].value
+
+
+def test_strain_sliders_change_the_view_not_the_numbers(
+    demo_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dragging either slider re-crops the heatmap; every score and tile stays identical."""
+    import re
+
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
+    at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
+    at.text_input[0].input(next(iter(list_snapshots(demo_dir)))).run()
+
+    def numbers(page: str) -> list[str]:
+        tiles = re.findall(r'<div class="v">([^<]+)</div>', page)  # every number tile
+        risks = re.findall(r"score (\d\.\d\d)", page)  # carousel risk scores
+        return tiles + risks
+
+    before = numbers(html_of(at))
+    at.slider[0].set_value(8).run()
+    at.slider[1].set_value(3).run()
+    assert not at.exception
+    assert numbers(html_of(at)) == before and len(before) >= 9

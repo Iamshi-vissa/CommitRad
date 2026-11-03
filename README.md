@@ -184,7 +184,7 @@ report: [`reports/eval.md`](reports/eval.md).
 ## Development
 
 ```bash
-make test         # pytest (165 tests)
+make test         # pytest (166 tests)
 make lint         # ruff check + ruff format --check
 make precache     # rebuild demo_cache/ snapshots
 make docker

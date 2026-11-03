@@ -308,8 +308,21 @@ def strain_section(strain: pd.DataFrame) -> None:
         )
     )
     c1, c2 = st.columns(2)
-    weeks = c1.slider("Weeks shown", 8, 156, 52, step=4)
-    top = c2.slider("Most active authors", 3, 30, 12)
+    weeks = c1.slider(
+        "Weeks shown · view only",
+        8,
+        156,
+        52,
+        step=4,
+        help="Changes which weeks are drawn. Scores and strain values never change.",
+    )
+    top = c2.slider(
+        "Most active authors · view only",
+        3,
+        30,
+        12,
+        help="Changes how many contributors get a row. Scores and strain values never change.",
+    )
     heat = heatmap_frame(strain, weeks, top)
     if heat.empty:
         st.info("No human commits in this window.")

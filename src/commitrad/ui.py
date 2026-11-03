@@ -93,12 +93,12 @@ html {{ scroll-behavior:smooth; }}
   background-size:0 1px; background-repeat:no-repeat; background-position:0 100%;
   transition:background-size var(--fast) var(--ease), color var(--fast) var(--ease); }}
 .cr a:hover {{ background-size:100% 1px; color:#8cc4ff; }}
-.cr-nav {{ display:flex; align-items:center; gap:12px; padding:6px 0 14px;
+.cr-nav {{ display:flex; align-items:center; gap:16px; padding:6px 0 18px;
   border-bottom:1px solid var(--border); }}
-.cr-nav img {{ width:30px; height:30px; transition:transform var(--slow) var(--ease); }}
+.cr-nav img {{ width:68px; height:68px; transition:transform var(--slow) var(--ease); }}
 .cr-nav img:hover {{ transform:rotate(-8deg) scale(1.06); }}
-.cr-word {{ font-family:var(--mono); font-weight:700; font-size:15px; letter-spacing:.02em; color:var(--text); }}
-.cr-tag {{ font-family:var(--mono); font-size:11px; color:var(--muted); border:1px solid var(--border);
+.cr-word {{ font-family:var(--mono); font-weight:700; font-size:60px; line-height:1; letter-spacing:-.01em; color:var(--text); }}
+.cr-tag {{ font-family:var(--mono); font-size:13px; align-self:flex-start; margin-top:6px; color:var(--muted); border:1px solid var(--border);
   border-radius:6px; padding:1px 7px; }}
 .cr-nav .sp {{ flex:1; }}
 .cr-nav .lk {{ font-family:var(--mono); font-size:12px; color:var(--muted); }}
@@ -141,8 +141,8 @@ html {{ scroll-behavior:smooth; }}
   font-variant-numeric:tabular-nums; }}
 .cr-kpi .s {{ font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-top:2px; }}
 .cr-sec {{ margin:38px 0 4px; }}
-.cr-sec .hd {{ display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:12px;
-  letter-spacing:.14em; text-transform:uppercase; color:var(--text); font-weight:500; }}
+.cr-sec .hd {{ display:flex; align-items:center; gap:16px; font-family:var(--mono); font-size:24px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--text); font-weight:500; }}
 .cr-sec .hd em {{ color:var(--accent); font-style:normal; }}
 .cr-sec .hd i {{ flex:1; height:1px; background:var(--border); }}
 .cr-sec p {{ font-size:13.5px; color:var(--muted); margin:8px 0 0; max-width:80ch; line-height:1.55; }}
@@ -243,6 +243,9 @@ html {{ scroll-behavior:smooth; }}
   .cr-grid {{ grid-template-columns:repeat(2, minmax(0,1fr)) !important; }}
   .cr-card {{ padding:16px; }}
   .cr-nav .lk.opt {{ display:none; }}
+  .cr-word {{ font-size:34px; }}
+  .cr-nav img {{ width:40px; height:40px; }}
+  .cr-sec .hd {{ font-size:18px; gap:10px; }}
 }}
 </style>
 """
@@ -372,7 +375,8 @@ def empty_html() -> str:
     return (
         '<div class="cr cr-empty">Paste any public <code>github.com</code>, '
         "<code>gitlab.com</code> or <code>codeberg.org</code> repository above. A live run "
-        "clones it and scores every commit in 20-60 seconds. The examples open instantly.</div>"
+        "clones it and scores every commit in 20-60 seconds; pallets/click, psf/requests and "
+        "pallets/flask are pre-computed and open instantly.</div>"
     )
 
 
