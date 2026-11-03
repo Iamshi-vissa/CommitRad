@@ -164,11 +164,11 @@ def test_dashboard_renders_demo_snapshot(demo_dir: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
-    assert at.selectbox[0].value is None and at.text_input[0].value == ""  # no defaults
-    assert not at.subheader  # nothing analyzed until a repo is chosen
+    assert not at.selectbox and at.text_input[0].value == ""  # one empty URL box, no defaults
+    assert not at.subheader  # nothing analyzed until a repo is entered
+    assert any("COMMITRAD" in m.value for m in at.markdown)  # logo banner
 
-    url = next(iter(list_snapshots(demo_dir)))
-    at.selectbox[0].select(url).run()
+    at.text_input[0].input(next(iter(list_snapshots(demo_dir)))).run()
     assert not at.exception
     assert "Signals, not judgments" in at.warning[0].value
     subheaders = [s.value for s in at.subheader]
@@ -186,15 +186,24 @@ def test_dashboard_renders_demo_snapshot(demo_dir: Path, monkeypatch: pytest.Mon
     assert "(raises risk)" in text or "(lowers risk)" in text
 
 
-def test_typing_a_url_clears_the_demo_choice(
-    demo_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
+def test_example_button_fills_the_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A snapshot keyed by a real example URL shows up as a one-click button."""
+    import gzip
+    import json
+
+    demo = tmp_path / "demo_cache"
+    demo.mkdir()
+    payload = {"repo": "https://github.com/pallets/click", "slug": "pallets__click",
+               "n_commits": 0, "n_bug_introducing_szz": 0, "commits": [], "strain": [],
+               "model": {"test_pr_auc": 0.2, "test_roc_auc": 0.7}}  # fmt: skip
+    with gzip.open(demo / "pallets__click.json.gz", "wt") as fh:
+        json.dump(payload, fh)
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
-    at.selectbox[0].select(next(iter(list_snapshots(demo_dir)))).run()
-    at.text_input[0].input("http://evil.example.com/x/y").run()
-    assert at.selectbox[0].value is None
-    assert "Invalid repository URL" in at.error[0].value
+    at.button(key="example_click").click().run()
+    assert not at.exception
+    assert at.text_input[0].value == "https://github.com/pallets/click"
+    assert any("pallets / **click**" in m.value for m in at.markdown)
 
 
 def test_dashboard_without_snapshots_prompts_for_url(
@@ -204,7 +213,8 @@ def test_dashboard_without_snapshots_prompts_for_url(
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
     assert "Signals, not judgments" in at.warning[0].value
-    assert any("Choose a repository" in m.value for m in at.markdown)
+    assert any("Paste a repository URL" in m.value for m in at.markdown)
+    assert not at.button  # no example buttons without snapshots
 
 
 def test_dashboard_rejects_bad_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

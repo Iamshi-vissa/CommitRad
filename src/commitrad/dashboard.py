@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from commitrad.analyze import (
     analyze_repo,
     list_snapshots,
     load_snapshot,
+    validate_repo_url,
 )
 from commitrad.dashboard_data import (
     COMPONENT_LABELS,
@@ -40,9 +42,27 @@ from commitrad.dashboard_data import (
 from commitrad.explain import reason
 
 DEMO_DIR = Path(os.environ.get("COMMITRAD_DEMO_DIR", "demo_cache"))
-URL_KEY, DEMO_KEY = "repo_url", "demo_repo"
+URL_KEY = "repo_url"
+LOGO = Path(__file__).with_name("assets") / "logo.svg"
+EXAMPLES = ("https://github.com/pallets/click", "https://github.com/psf/requests",
+            "https://github.com/pallets/flask")  # fmt: skip
 
-st.set_page_config(page_title="CommitRad", page_icon=":material/radar:", layout="wide")
+st.set_page_config(page_title="CommitRad", page_icon=str(LOGO), layout="wide")
+
+# Demo polish: no Streamlit top bar, tight page padding, crisp uppercase section headers.
+PAGE_CSS = """
+<style>
+[data-testid="stHeader"] { display: none; }
+[data-testid="stMainBlockContainer"] { padding-top: 1.75rem; padding-bottom: 1.5rem; }
+[data-testid="stHeading"] h3 {
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; font-size: 1.05rem;
+}
+.cr-hero { display: flex; align-items: center; gap: 16px; padding: 4px 0 14px; }
+.cr-hero img { width: 60px; height: 60px; flex: none; }
+.cr-word { font-size: 2.1rem; font-weight: 800; letter-spacing: 0.14em; line-height: 1.1; }
+.cr-tag { font-size: 0.95rem; opacity: 0.72; margin-top: 2px; }
+</style>
+"""
 
 
 @dataclass(frozen=True)
@@ -87,6 +107,13 @@ def _live(url: str) -> dict[str, Any]:
 
 
 def load(url: str, snapshots: dict[str, Path]) -> dict[str, Any] | None:
+    if url in snapshots:
+        return _snapshot(str(snapshots[url]))
+    try:
+        url = validate_repo_url(url, Settings())  # .../repo/, .../repo.git -> canonical
+    except InvalidRepoURL as exc:
+        st.error(f"Invalid repository URL: {exc}", icon=":material/error:")
+        return None
     if url in snapshots:
         return _snapshot(str(snapshots[url]))
     try:
@@ -175,46 +202,48 @@ def strain_over_time(weeks: pd.DataFrame, repo_median: float, pal: Palette) -> a
 # --- page sections -------------------------------------------------------------------------
 
 
-def _pick_demo() -> None:
-    if st.session_state.get(DEMO_KEY):
-        st.session_state[URL_KEY] = ""
+def _use_example(url: str) -> None:
+    st.session_state[URL_KEY] = url
 
 
-def _type_url() -> None:
-    if st.session_state.get(URL_KEY):
-        st.session_state[DEMO_KEY] = None
+def logo_data_uri() -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(LOGO.read_bytes()).decode()
 
 
-def header(snapshots: dict[str, Path]) -> str:
-    st.title(":material/radar: CommitRad")
-    st.caption("Risky-commit and developer-strain signals mined from git history.")
-    st.warning(f"**Signals, not judgments.** {DISCLAIMER}", icon=":material/info:")
-    left, right = st.columns([2, 3])
-    demo = left.selectbox(
-        "Demo repository (pre-computed, loads instantly)",
-        list(snapshots),
-        index=None,
-        placeholder="Choose a demo repository",
-        key=DEMO_KEY,
-        on_change=_pick_demo,
+def header() -> str:
+    st.html(PAGE_CSS)
+    st.markdown(
+        f'<div class="cr-hero"><img src="{logo_data_uri()}" alt="CommitRad logo"/><div>'
+        '<div class="cr-word">COMMITRAD</div><div class="cr-tag">Risky-commit and '
+        "developer-strain radar for git history</div></div></div>",
+        unsafe_allow_html=True,
     )
-    url = right.text_input(
-        "…or any public repository URL",
+    st.warning(f"**Signals, not judgments.** {DISCLAIMER}", icon=":material/info:")
+    url = st.text_input(
+        "Public repository URL (GitHub, GitLab or Codeberg)",
         key=URL_KEY,
         placeholder="https://github.com/owner/repo",
-        on_change=_type_url,
     )
-    return (url or demo or "").strip()
+    return (url or "").strip()
 
 
-def empty_state() -> None:
+def empty_state(snapshots: dict[str, Path]) -> None:
     with st.container(border=True):
-        st.markdown("#### :material/search: Choose a repository to analyze")
+        st.markdown("#### :material/search: Paste a repository URL to analyze")
         st.markdown(
-            "Pick a **demo repository** for an instant result, or paste a public **GitHub, "
-            "GitLab or Codeberg** URL. A live analysis clones the repo and takes 20-60 seconds "
-            "for a few thousand commits."
+            "CommitRad clones the repo and scores every commit. A live analysis takes 20-60 "
+            "seconds for a few thousand commits; the examples below are pre-computed and open "
+            "instantly."
         )
+        examples = [u for u in EXAMPLES if u in snapshots]
+        if examples:
+            cols = st.columns(len(examples))
+            for col, url in zip(cols, examples, strict=True):
+                owner, name = repo_parts(url)
+                col.button(
+                    f"{owner}/{name}", icon=":material/bolt:", key=f"example_{name}",
+                    on_click=_use_example, args=(url,), use_container_width=True,
+                )  # fmt: skip
 
 
 def repo_header(result: dict[str, Any]) -> None:
@@ -384,9 +413,9 @@ def risky_section(result: dict[str, Any]) -> None:
 def main() -> None:
     pal = palette()
     snapshots = list_snapshots(DEMO_DIR)
-    url = header(snapshots)
+    url = header()
     if not url:
-        empty_state()
+        empty_state(snapshots)
         return
     result = load(url, snapshots)
     if result is None:
