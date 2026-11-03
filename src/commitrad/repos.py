@@ -40,7 +40,7 @@ def read_repo_list(path: Path) -> list[str]:
     return list(seen)
 
 
-def ensure_clone(source: str, clone_dir: Path) -> Path:
+def ensure_clone(source: str, clone_dir: Path, timeout: float | None = None) -> Path:
     """Return a local checkout for ``source``, cloning into ``clone_dir`` if needed.
 
     Local directories are used in place. Clones go to a temp dir first and are
@@ -59,6 +59,7 @@ def ensure_clone(source: str, clone_dir: Path) -> Path:
             check=True,
             capture_output=True,
             text=True,
+            timeout=timeout,
         )
         tmp.rename(target)
     except BaseException:

@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
     strain.add_argument("--models", type=Path, default=DEFAULT_MODEL_DIR)
     strain.add_argument("--config", type=Path, default=DEFAULT_STRAIN_CONFIG)
     strain.add_argument("--db", type=Path, default=DEFAULT_DB)
+
+    serve = sub.add_parser("serve", help="Run the HTTP API (GET /analyze?repo=URL).")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
     return parser
 
 
@@ -159,6 +163,13 @@ def cmd_strain(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    uvicorn.run("commitrad.api:app", host=args.host, port=args.port)
+    return 0
+
+
 def cmd_mine(args: argparse.Namespace) -> int:
     sources = load_sources(args.repo_list)
     results = mine_repos(sources, args.out, args.clones, args.workers, args.force)
@@ -182,6 +193,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_train(args)
         if args.command == "strain":
             return cmd_strain(args)
+        if args.command == "serve":
+            return cmd_serve(args)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

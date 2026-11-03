@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from commitrad.features import author_key, local_time
+from commitrad.szz import is_bot
 
 COMPONENTS = ("off_hours", "risk", "burstiness", "negativity")
 DEFAULT_CONFIG = Path("config/strain.toml")
@@ -113,9 +114,15 @@ def blend(components: pd.DataFrame, config: StrainConfig) -> pd.Series:
 
 
 def weekly_strain(commits: pd.DataFrame, config: StrainConfig | None = None) -> pd.DataFrame:
-    """One row per (repo, author, week) with components and the blended ``strain``."""
+    """One row per (repo, author, week) with components and the blended ``strain``.
+
+    Bot accounts are excluded: strain describes people, not automation.
+    """
     config = config or StrainConfig()
-    per = commit_components(commits)
+    human = [
+        not is_bot(a, e) for a, e in zip(commits["author"], commits["author_email"], strict=True)
+    ]
+    per = commit_components(commits[human])
     rows = []
     for (repo, author_id, week), g in per.groupby(["repo", "author_id", "week"], sort=True):
         rows.append(

@@ -287,6 +287,7 @@ def metadata(result: TrainResult) -> dict[str, Any]:
         "sensitivity": result.sensitivity,
         "importance": result.importance.to_dict(orient="records"),
         "risk_quantiles": result.risk_quantiles,
+        "training_repos": sorted(result.split.train["repo"].unique().tolist()),
     }
 
 

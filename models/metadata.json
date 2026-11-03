@@ -291,5 +291,12 @@
     0.4954552832632765,
     0.5049189917095505,
     0.5139992277249903
+  ],
+  "training_repos": [
+    "jd__tenacity",
+    "pallets__itsdangerous",
+    "pallets__markupsafe",
+    "python-humanize__humanize",
+    "tartley__colorama"
   ]
 }

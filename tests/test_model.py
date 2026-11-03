@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from frames import random_history
+from frames import planted_features
 
-from commitrad.features import FEATURE_COLUMNS, build_features
+from commitrad.features import FEATURE_COLUMNS
 from commitrad.model import (
     RiskModel,
     class_weight,
@@ -19,18 +19,11 @@ from commitrad.model import (
     time_split,
 )
 from commitrad.report import render_report
-from commitrad.sentiment import LexiconSentiment
 
 
 @pytest.fixture(scope="module")
 def features() -> pd.DataFrame:
-    """Feature table with a planted signal: large diffs are usually bug-introducing."""
-    df = build_features(random_history(n=900, seed=3), LexiconSentiment(), "synthetic")
-    rng = np.random.default_rng(0)
-    risky = (df["lines_added"] > 70) | (rng.random(len(df)) < 0.03)
-    df["is_bug_introducing"] = risky
-    df["bug_found_at"] = df["timestamp"].where(risky) + pd.Timedelta(days=3)
-    return df
+    return planted_features()
 
 
 def test_time_split_is_ordered_and_keeps_ties_together(features: pd.DataFrame) -> None:
@@ -96,6 +89,7 @@ def test_model_learns_signal_and_shap_is_additive(features: pd.DataFrame, tmp_pa
     loaded, meta = load_model(tmp_path)
     np.testing.assert_allclose(loaded.predict(sample), result.model.predict(sample), rtol=1e-9)
     assert meta["features"] == FEATURE_COLUMNS and meta["label_mode"] == "strict"
+    assert meta["training_repos"] == ["synthetic"] and len(meta["risk_quantiles"]) == 101
     assert len(list(tmp_path.glob("commitrad_seed*.lgb"))) == 2
 
     report = render_report(result, ["synthetic"])
