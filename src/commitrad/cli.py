@@ -78,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--out", type=Path, default=Path("demo_cache"))
 
     dash = sub.add_parser("dashboard", help="Launch the Streamlit dashboard.")
+    dash.add_argument("--host", default="127.0.0.1")
     dash.add_argument("--port", type=int, default=8501)
 
     serve = sub.add_parser("serve", help="Run the HTTP API (GET /analyze?repo=URL).")
@@ -189,7 +190,11 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     import subprocess
 
     app = Path(__file__).with_name("dashboard.py")
-    cmd = ["streamlit", "run", str(app), "--server.port", str(args.port)]
+    cmd = [
+        "streamlit", "run", str(app),
+        "--server.address", args.host, "--server.port", str(args.port),
+        "--server.headless", "true", "--browser.gatherUsageStats", "false",
+    ]  # fmt: skip
     return subprocess.call([sys.executable, "-m", *cmd])
 
 
