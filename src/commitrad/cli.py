@@ -81,6 +81,31 @@ def build_parser() -> argparse.ArgumentParser:
     dash.add_argument("--host", default="127.0.0.1")
     dash.add_argument("--port", type=int, default=8501)
 
+    check = sub.add_parser("check", help="Score your unpushed commits (pre-push risk check).")
+    check.add_argument("--repo", type=Path, default=Path("."), help="Repository to check.")
+    check.add_argument("--base", default=None, help="Compare against this ref (default: upstream).")
+    check.add_argument("--models", type=Path, default=DEFAULT_MODEL_DIR)
+    check.add_argument(
+        "--fail-above",
+        type=float,
+        default=None,
+        metavar="PCTL",
+        help="Exit 1 if any commit's risk percentile is at least this (0-1), e.g. 0.99.",
+    )
+
+    hook = sub.add_parser("hook", help="Install or remove the git pre-push risk check.")
+    hook.add_argument("action", choices=["install", "uninstall"])
+    hook.add_argument("--repo", type=Path, default=Path("."))
+    hook.add_argument("--models", type=Path, default=DEFAULT_MODEL_DIR)
+    hook.add_argument(
+        "--block-above",
+        type=float,
+        default=None,
+        metavar="PCTL",
+        help="Block pushes with a commit at or above this risk percentile (default: warn only).",
+    )
+    hook.add_argument("--force", action="store_true", help="Replace an existing pre-push hook.")
+
     serve = sub.add_parser("serve", help="Run the HTTP API (GET /analyze?repo=URL).")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -198,6 +223,32 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     return subprocess.call([sys.executable, "-m", *cmd])
 
 
+def cmd_check(args: argparse.Namespace) -> int:
+    from commitrad.check import check_repo, format_report, should_block
+
+    ref, commits = check_repo(args.repo, args.models, args.base)
+    print(format_report(ref, commits, args.fail_above))
+    if should_block(commits, args.fail_above):
+        print(f"\nPush blocked: a commit is at or above the {args.fail_above:.0%} risk percentile.")
+        return 1
+    return 0
+
+
+def cmd_hook(args: argparse.Namespace) -> int:
+    from commitrad.check import install_hook, uninstall_hook
+
+    if args.action == "install":
+        path = install_hook(args.repo, args.models, args.block_above, args.force)
+        mode = (
+            f"blocks at >= {args.block_above:.0%}" if args.block_above is not None else "warn only"
+        )
+        print(f"pre-push hook installed ({mode}): {path}")
+    else:
+        path = uninstall_hook(args.repo)
+        print(f"pre-push hook removed: {path}" if path else "no commitrad pre-push hook found")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -230,11 +281,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_strain(args)
         if args.command == "serve":
             return cmd_serve(args)
+        if args.command == "check":
+            return cmd_check(args)
+        if args.command == "hook":
+            return cmd_hook(args)
         if args.command == "precache":
             return cmd_precache(args)
         if args.command == "dashboard":
             return cmd_dashboard(args)
-    except (ValueError, FileNotFoundError) as exc:
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 2

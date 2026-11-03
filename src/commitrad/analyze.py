@@ -19,6 +19,7 @@ import pandas as pd
 
 from commitrad.explain import explain_frame
 from commitrad.features import FEATURE_COLUMNS, build_features
+from commitrad.github import git_auth_config
 from commitrad.mining import mine_table
 from commitrad.model import RiskModel, load_model
 from commitrad.pipeline import score_commits
@@ -95,17 +96,26 @@ def _git(repo: Path, *args: str, timeout: float) -> str:
     ).stdout.strip()
 
 
-def clone_or_update(source: str, settings: Settings) -> Path:
-    """Cached clone; refreshed with a fast-forward pull (kept as-is if the pull fails)."""
+def clone_or_update(source: str, settings: Settings, token: str | None = None) -> Path:
+    """Cached clone; refreshed with a fast-forward pull (kept as-is if the pull fails).
+
+    ``token`` authenticates private GitHub repos via a one-off git header; it is never
+    written into the clone's config.
+    """
     if settings.allow_local and Path(source).is_dir():
         return Path(source)
+    auth = git_auth_config(token)
     target = settings.clone_dir / repo_slug(source)
     if (target / ".git").is_dir():
         # A failed refresh serves the cached snapshot rather than failing the request.
         with contextlib.suppress(subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            _git(target, "pull", "--ff-only", "--quiet", timeout=settings.git_timeout_seconds)
+            _git(
+                target, *auth, "pull", "--ff-only", "--quiet", timeout=settings.git_timeout_seconds
+            )
         return target
-    return ensure_clone(source, settings.clone_dir, timeout=settings.git_timeout_seconds)
+    return ensure_clone(
+        source, settings.clone_dir, timeout=settings.git_timeout_seconds, git_config=auth
+    )
 
 
 # --- pipeline ----------------------------------------------------------------------------
@@ -126,10 +136,15 @@ def commit_payload(
             {
                 "hash": r["hash"],
                 "author": r["author"],
+                "author_email": (r["author_email"] or "").lower(),
                 "timestamp": r["timestamp"].isoformat(),
                 "subject": msg.splitlines()[0][:200] if msg else "",
                 "risk": round(float(r["risk"]), 4),
                 "risk_percentile": round(float(r["risk_pct"]), 4),
+                "via_pr": bool(r["via_pr"]),
+                "off_hours": bool(r["is_night"] or r["is_weekend"]),
+                # Retrospective SZZ label: a later fix traced a bug back to this commit.
+                "bug_introducing": bool(r["is_bug_introducing"]),
                 "top_reasons": why,
             }
         )
@@ -193,14 +208,17 @@ def _repo_lock(slug: str) -> threading.Lock:
         return _locks.setdefault(slug, threading.Lock())
 
 
-def analyze_repo(url: str, settings: Settings) -> dict[str, Any]:
+PAYLOAD_VERSION = 2  # bump when the result shape changes, so stale cache files are ignored
+
+
+def analyze_repo(url: str, settings: Settings, token: str | None = None) -> dict[str, Any]:
     """Validated, cached analysis. Results are cached per (repo, HEAD commit)."""
     source = validate_repo_url(url, settings)
     slug = repo_slug(source)
     with _repo_lock(slug):
-        repo = clone_or_update(source, settings)
+        repo = clone_or_update(source, settings, token)
         head = _git(repo, "rev-parse", "HEAD", timeout=settings.git_timeout_seconds)
-        cached = settings.cache_dir / f"{slug}-{head}.json"
+        cached = settings.cache_dir / f"{slug}-{head}-v{PAYLOAD_VERSION}.json"
         if cached.exists():
             return {**json.loads(cached.read_text()), "cached": True}
         count = int(_git(repo, "rev-list", "--count", "HEAD", timeout=settings.git_timeout_seconds))
