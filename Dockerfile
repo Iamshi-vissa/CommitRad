@@ -23,6 +23,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
 COPY config ./config
+COPY .streamlit ./.streamlit
 COPY models ./models
 COPY demo_cache ./demo_cache
 RUN uv sync --frozen --no-dev

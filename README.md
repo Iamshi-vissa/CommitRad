@@ -21,7 +21,9 @@ make dashboard    # http://localhost:8501, demo repos load instantly
 
 The repo ships a trained model (`models/`) and pre-computed snapshots of three popular
 repos (`demo_cache/`: pallets/flask, psf/requests, pallets/click), so the dashboard works
-immediately. Paste any public GitHub, GitLab or Codeberg URL to analyze it live.
+immediately: pick a demo repo, or paste any public GitHub, GitLab or Codeberg URL to analyze
+it live. The GitHub (Primer) light/dark theme lives in `.streamlit/config.toml`, which
+Streamlit reads from the folder it is launched in, so start the dashboard from the project root.
 
 ```bash
 make serve        # API on http://localhost:8000 (docs at /docs)
@@ -63,7 +65,7 @@ flowchart LR
 | Train | `commitrad train` | `model.py`, `report.py` | `models/`, `reports/eval.md` |
 | Strain | `commitrad strain` | `strain.py`, `store.py` | DuckDB tables `strain(author, week, strain, …)` and `commit_risk` |
 | Serve | `commitrad serve` | `api.py`, `analyze.py` | `GET /analyze?repo=URL`, `GET /health` |
-| Dashboard | `commitrad dashboard` | `dashboard.py` | heatmap, radar, top-5 risky commits |
+| Dashboard | `commitrad dashboard` | `dashboard.py` | GitHub-themed page: strain heatmap, per-author radar + weekly trend, top-5 risky commits carousel |
 
 `make demo` runs the whole offline pipeline (mine → label → features → train → strain) on
 the five repos in `repos.txt`. Mining and labeling run in parallel and are resumable:
@@ -157,7 +159,7 @@ strict labels, the same pipeline scores test PR-AUC 0.190.
 ## Development
 
 ```bash
-make test         # pytest (122 tests: pipeline, SZZ fixtures, leakage, API, dashboard)
+make test         # pytest (127 tests: pipeline, SZZ fixtures, leakage, API, dashboard)
 make lint         # ruff check + ruff format --check
 make format
 make precache     # rebuild demo_cache/ snapshots
