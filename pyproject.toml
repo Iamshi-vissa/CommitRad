@@ -39,7 +39,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ANN", "RUF"]
-ignore = ["SIM905"]  # "a b c".split() reads better than long literal lists for vocabularies
+ignore = ["SIM905"]
+
+[tool.ruff.lint.per-file-ignores]
+# The dashboard stylesheet is CSS inside a Python string: long declarations read better unwrapped.
+"src/commitrad/ui.py" = ["E501"]  # "a b c".split() reads better than long literal lists for vocabularies
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

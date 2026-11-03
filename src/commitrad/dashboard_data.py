@@ -105,6 +105,8 @@ def radar_svg(
     ink: str,
     muted: str,
     grid: str,
+    surface: str = "#ffffff",
+    mono: str = "ui-monospace, monospace",
 ) -> str:
     """A self-contained SVG radar: zoomed rings with values, filled shapes, labelled points.
 
@@ -119,8 +121,8 @@ def radar_svg(
         return cx + x * radius, cy - y * radius
 
     parts = [
-        f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" '
-        f'aria-label="Strain profile radar" style="max-width:{width}px;font-family:inherit">'
+        f'<svg class="cr-radar" viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="Strain profile radar" style="font-family:inherit">'
     ]
     for k in range(1, 5):  # rings + their values on the top spoke
         pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in (xy(i, k / 4) for i in range(n)))
@@ -128,7 +130,7 @@ def radar_svg(
         _, ry = xy(0, k / 4)
         parts.append(  # left of the top spoke; the author's values sit to its right
             f'<text x="{cx - 6}" y="{ry + 13}" text-anchor="end" font-size="11" '
-            f'fill="{muted}">{extent * k / 4:.2f}</text>'
+            f'font-family="{mono}" fill="{muted}">{extent * k / 4:.2f}</text>'
         )
     for i, comp in enumerate(COMPONENTS):  # spokes + axis names
         x, y = xy(i, 1)
@@ -136,32 +138,24 @@ def radar_svg(
         lx, ly = xy(i, 1.13)
         anchor = "middle" if abs(lx - cx) < 1 else ("start" if lx > cx else "end")
         parts.append(
-            f'<text x="{lx:.1f}" y="{ly + 5:.1f}" text-anchor="{anchor}" font-size="14" '
-            f'font-weight="600" fill="{ink}">{COMPONENT_LABELS[comp]}</text>'
+            f'<text x="{lx:.1f}" y="{ly + 5:.1f}" text-anchor="{anchor}" font-size="12" '
+            f'font-family="{mono}" letter-spacing="1.2" fill="{ink}">'
+            f"{COMPONENT_LABELS[comp].upper()}</text>"
         )
     for (series, profile), color in zip(profiles.items(), colors, strict=False):
         pts = [xy(i, min(profile[c], extent) / extent) for i, c in enumerate(COMPONENTS)]
         poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
         parts.append(
-            f'<polygon points="{poly}" fill="{color}" fill-opacity="0.16" stroke="{color}" '
-            f'stroke-width="2.5" stroke-linejoin="round"/>'
+            f'<polygon class="shape" points="{poly}" fill="{color}" fill-opacity="0.16" '
+            f'stroke="{color}" stroke-width="2.5" stroke-linejoin="round"/>'
         )
         name = html.escape(series)
         for (x, y), comp in zip(pts, COMPONENTS, strict=True):
             tip = f"{name} · {COMPONENT_LABELS[comp]}: {profile[comp]:.2f}"
             parts.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5.5" fill="{color}" stroke="white" '
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5.5" fill="{color}" stroke="{surface}" '
                 f'stroke-width="1.5"><title>{tip}</title></circle>'
             )
-    lx = 12
-    for (series, _), color in zip(profiles.items(), colors, strict=False):  # legend
-        label = html.escape(series)
-        parts.append(f'<circle cx="{lx + 6}" cy="22" r="6" fill="{color}"/>')
-        parts.append(
-            f'<text x="{lx + 18}" y="27" font-size="14" font-weight="600" fill="{ink}">'
-            f"{label}</text>"
-        )
-        lx += 30 + 8 * len(series)
     first = next(iter(profiles.values()))
     for i, comp in enumerate(COMPONENTS):  # value labels for the selected author
         r = min(first[comp], extent) / extent
@@ -175,7 +169,7 @@ def radar_svg(
             tx, ty, anchor = x + 10, y + (4 if i == 0 else 16), "start"
         parts.append(
             f'<text x="{tx:.1f}" y="{ty:.1f}" text-anchor="{anchor}" font-size="13" '
-            f'font-weight="700" fill="{colors[0]}">{first[comp]:.2f}</text>'
+            f'font-family="{mono}" font-weight="700" fill="{colors[0]}">{first[comp]:.2f}</text>'
         )
     parts.append("</svg>")
     return "".join(parts)

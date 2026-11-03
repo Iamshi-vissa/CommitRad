@@ -160,30 +160,29 @@ def test_snapshot_roundtrip_and_listing(demo_dir: Path) -> None:
     assert data["repo"] == url and "snapshot_at" in data and "cached" not in data
 
 
+def html_of(at: AppTest) -> str:
+    """Everything rendered through st.html and st.markdown, as one string."""
+    return " ".join([h.proto.body for h in at.get("html")] + [m.value for m in at.markdown])
+
+
 def test_dashboard_renders_demo_snapshot(demo_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
     assert not at.selectbox and at.text_input[0].value == ""  # one empty URL box, no defaults
-    assert not at.subheader  # nothing analyzed until a repo is entered
-    assert any("COMMITRAD" in m.value for m in at.markdown)  # logo banner
+    page = html_of(at)
+    assert "cr-nav" in page and "commitrad analyze" in page and "Signals, not judgments" not in page
+    assert "not judgments about people" in page  # the disclaimer note
+    assert 'class="cr cr-sec"' not in page  # nothing analyzed until a repo is entered
 
     at.text_input[0].input(next(iter(list_snapshots(demo_dir)))).run()
     assert not at.exception
-    assert "Signals, not judgments" in at.warning[0].value
-    subheaders = [s.value for s in at.subheader]
-    assert subheaders == ["Weekly strain", "Strain profile by author", "Top 5 riskiest commits"]
-    assert at.metric[0].value == "3"
-    assert "Commit 1 of 3" in [c.value for c in at.caption]
-
-    at.button(key=next(b.key for b in at.button if b.key.endswith("_next"))).click().run()
-    assert "Commit 2 of 3" in [c.value for c in at.caption]
-    prev_key = next(b.key for b in at.button if b.key.endswith("_prev"))
-    at.button(key=prev_key).click().run()
-    at.button(key=prev_key).click().run()
-    assert "Commit 3 of 3" in [c.value for c in at.caption]  # wraps around
-    text = " ".join(m.value for m in at.markdown)
-    assert "(raises risk)" in text or "(lowers risk)" in text
+    page = html_of(at)
+    for section in ("Weekly strain", "Strain profile", "Riskiest commits"):
+        assert section in page
+    assert "cr-radar" in page and "cr-kpi" in page and "cr-foot" in page
+    assert page.count('type="radio"') == 3  # one carousel slide per commit (3 in this repo)
+    assert "@@ why the model flagged it @@" in page
 
 
 def test_example_button_fills_the_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,7 +202,7 @@ def test_example_button_fills_the_url(tmp_path: Path, monkeypatch: pytest.Monkey
     at.button(key="example_click").click().run()
     assert not at.exception
     assert at.text_input[0].value == "https://github.com/pallets/click"
-    assert any("pallets / **click**" in m.value for m in at.markdown)
+    assert "pallets/<strong>click</strong>" in html_of(at)
 
 
 def test_dashboard_without_snapshots_prompts_for_url(
@@ -212,8 +211,7 @@ def test_dashboard_without_snapshots_prompts_for_url(
     monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(tmp_path / "empty"))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
-    assert "Signals, not judgments" in at.warning[0].value
-    assert any("Paste a repository URL" in m.value for m in at.markdown)
+    assert 'class="cr cr-empty"' in html_of(at)
     assert not at.button  # no example buttons without snapshots
 
 
