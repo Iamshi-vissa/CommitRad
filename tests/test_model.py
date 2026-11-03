@@ -106,3 +106,19 @@ def test_model_learns_signal_and_shap_is_additive(features: pd.DataFrame, tmp_pa
 def test_load_rejects_missing_model(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         RiskModel.load(tmp_path)
+
+
+def test_strain_pipeline_end_to_end(features: pd.DataFrame, tmp_path: Path) -> None:
+    from commitrad.pipeline import run_strain
+    from commitrad.store import connect, read_table
+    from commitrad.strain import StrainConfig
+
+    save_model(run_training(features, "strict", n_seeds=1), tmp_path / "m")
+    run = run_strain(features, tmp_path / "m", StrainConfig(), tmp_path / "db.duckdb")
+    assert run.n_commits == len(features) and run.n_weeks > 0
+    with connect(tmp_path / "db.duckdb", read_only=True) as con:
+        risk = read_table(con, "commit_risk")
+        strain = read_table(con, "strain")
+    assert len(risk) == len(features) and risk["risk_pct"].between(0, 1).all()
+    assert strain["n_commits"].sum() == len(features)
+    assert strain["strain"].between(0, 1).all()

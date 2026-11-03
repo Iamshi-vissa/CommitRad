@@ -18,6 +18,8 @@ DEFAULT_LABELED_DIR = Path("data/labeled")
 DEFAULT_FEATURES_DIR = Path("data/features")
 DEFAULT_MODEL_DIR = Path("models")
 DEFAULT_REPORT = Path("reports/eval.md")
+DEFAULT_DB = Path("data/commitrad.duckdb")
+DEFAULT_STRAIN_CONFIG = Path("config/strain.toml")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="strict",
         help="strict: train/val labels only use fixes known before the next split starts.",
     )
+
+    strain = sub.add_parser("strain", help="Score commits and store weekly strain in DuckDB.")
+    strain.add_argument("--features", type=Path, default=DEFAULT_FEATURES_DIR)
+    strain.add_argument("--models", type=Path, default=DEFAULT_MODEL_DIR)
+    strain.add_argument("--config", type=Path, default=DEFAULT_STRAIN_CONFIG)
+    strain.add_argument("--db", type=Path, default=DEFAULT_DB)
     return parser
 
 
@@ -140,6 +148,17 @@ def cmd_train(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_strain(args: argparse.Namespace) -> int:
+    from commitrad.pipeline import run_strain
+    from commitrad.strain import load_config
+
+    run = run_strain(load_features(args.features), args.models, load_config(args.config), args.db)
+    s = run.strain
+    print(f"scored {run.n_commits} commits -> {run.n_weeks} author-weeks in {args.db}")
+    print(f"strain: mean={s['strain'].mean():.3f} p90={s['strain'].quantile(0.9):.3f}")
+    return 0
+
+
 def cmd_mine(args: argparse.Namespace) -> int:
     sources = load_sources(args.repo_list)
     results = mine_repos(sources, args.out, args.clones, args.workers, args.force)
@@ -161,6 +180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_features(args)
         if args.command == "train":
             return cmd_train(args)
+        if args.command == "strain":
+            return cmd_strain(args)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

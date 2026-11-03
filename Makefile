@@ -19,3 +19,4 @@ demo:
 	uv run commitrad label repos.txt
 	uv run commitrad features repos.txt
 	uv run commitrad train
+	uv run commitrad strain
