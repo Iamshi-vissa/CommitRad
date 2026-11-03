@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,10 @@ from typing import Any
 import altair as alt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from commitrad import ui
+from commitrad.account import InvalidLogin, analyze_account, validate_login
 from commitrad.analyze import (
     DISCLAIMER,
     InvalidRepoURL,
@@ -38,11 +41,11 @@ from commitrad.dashboard_data import (
     week_axis,
 )
 from commitrad.explain import describe_value
+from commitrad.github import GitHubError
 
 DEMO_DIR = Path(os.environ.get("COMMITRAD_DEMO_DIR", "demo_cache"))
 URL_KEY = "repo_url"
-EXAMPLES = ("https://github.com/pallets/click", "https://github.com/psf/requests",
-            "https://github.com/pallets/flask")  # fmt: skip
+MODES = ("Repository", "GitHub account", "Pre-push check")
 
 st.set_page_config(page_title="CommitRad", page_icon=str(ui.LOGO), layout="wide")
 
@@ -88,15 +91,27 @@ def _style(chart: alt.TopLevelMixin) -> alt.TopLevelMixin:
         )
         .configure_view(strokeWidth=0)
         .configure_axis(
-            labelFont=ui.MONO, titleFont=ui.MONO, labelColor=ui.MUTED, titleColor=ui.MUTED,
-            labelFontSize=11, titleFontSize=11, titleFontWeight=400, gridColor="#1a2029",
-            domainColor=ui.BORDER, tickColor=ui.BORDER,
+            labelFont=ui.MONO,
+            titleFont=ui.MONO,
+            labelColor=ui.MUTED,
+            titleColor=ui.MUTED,
+            labelFontSize=11,
+            titleFontSize=11,
+            titleFontWeight=400,
+            gridColor="#1a2029",
+            domainColor=ui.BORDER,
+            tickColor=ui.BORDER,
         )
         .configure_legend(
-            labelFont=ui.MONO, titleFont=ui.MONO, labelColor=ui.MUTED, titleColor=ui.MUTED,
-            titleFontWeight=400, labelFontSize=11, titleFontSize=11,
+            labelFont=ui.MONO,
+            titleFont=ui.MONO,
+            labelColor=ui.MUTED,
+            titleColor=ui.MUTED,
+            titleFontWeight=400,
+            labelFontSize=11,
+            titleFontSize=11,
         )
-    )  # fmt: skip
+    )
 
 
 def heatmap(heat: pd.DataFrame, weeks: int) -> alt.TopLevelMixin:
@@ -165,8 +180,9 @@ def strain_over_time(weeks: pd.DataFrame, repo_median: float) -> alt.TopLevelMix
         scale=alt.Scale(padding=14),  # keep edge points whole
         axis=alt.Axis(format="%Y", labelAngle=0, grid=False, tickCount="year"),
     )
-    y = alt.Y("strain:Q", title="strain", scale=alt.Scale(domain=[0, 1]),
-              axis=alt.Axis(tickCount=5))  # fmt: skip
+    y = alt.Y(
+        "strain:Q", title="strain", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(tickCount=5)
+    )
     hover = alt.selection_point(on="pointerover", clear="pointerout", nearest=True, fields=["week"])
     tooltip = [
         alt.Tooltip("week_label:N", title="week of"),
@@ -200,31 +216,57 @@ def strain_over_time(weeks: pd.DataFrame, repo_median: float) -> alt.TopLevelMix
 # --- page sections -------------------------------------------------------------------------
 
 
-def _use_example(url: str) -> None:
-    st.session_state[URL_KEY] = url
+@st.cache_data(show_spinner=False)
+def _model_note(model_dir: str = "models") -> str:
+    try:
+        meta = json.loads((Path(model_dir) / "metadata.json").read_text())
+        pr_auc = meta["metrics"]["test"]["lightgbm"]["pr_auc"]
+        return f"lightgbm · {len(meta['features'])} features · test pr-auc {pr_auc:.2f}"
+    except (OSError, KeyError, ValueError):
+        return "lightgbm ensemble"
 
 
-def header(snapshots: dict[str, Path]) -> str:
+def scroll_to(anchor: str, token: str) -> None:
+    """Smooth-scroll the page to ``anchor`` once per ``token`` (e.g. once per new result)."""
+    if st.session_state.get("_scrolled") == token:
+        return
+    st.session_state["_scrolled"] = token
+    components.html(
+        "<script>setTimeout(function(){var el=window.parent.document.getElementById("
+        f"{json.dumps(anchor)});if(el)el.scrollIntoView({{behavior:'smooth',block:'start'}});}},120);"
+        "</script>",
+        height=0,
+    )
+
+
+def nav() -> str:
     st.html(ui.CSS)
-    st.html(ui.nav_html("lightgbm · 5-seed ensemble · test pr-auc 0.22"))
-    st.html(ui.hero_html(DISCLAIMER))
+    st.html(ui.nav_html(_model_note()))
+    mode = st.segmented_control(
+        "View", MODES, key="mode", default=MODES[0], label_visibility="collapsed"
+    )
+    return mode or MODES[0]
+
+
+def repo_input(collapsed: bool) -> str:
+    if not collapsed:
+        st.html(
+            ui.page_hero_html(
+                "Commit risk and team strain,",
+                "read straight from git history.",
+                "CommitRad traces past bugs back to the commits that introduced them, learns "
+                "what risky changes look like, and ranks every commit in a repository with "
+                "the reasons attached.",
+            )
+        )
+        st.html(ui.note_html(DISCLAIMER))
+    st.html(ui.prompt_html("commitrad analyze", "repo-url"))
     url = st.text_input(
         "Repository URL",
         key=URL_KEY,
-        placeholder="https://github.com/owner/repo",
+        placeholder="https://github.com/owner/repo  ·  press Enter",
         label_visibility="collapsed",
     )
-    examples = [u for u in EXAMPLES if u in snapshots]
-    if examples:
-        with st.container(horizontal=True, horizontal_alignment="left", key="examples"):
-            st.html(
-                width="content",
-                body='<span style="font-family:var(--mono);font-size:12px;color:var(--faint)">'
-                    "try →</span>")  # fmt: skip
-            for example in examples:
-                owner, name = repo_parts(example)
-                st.button(f"{owner}/{name}", key=f"example_{name}", on_click=_use_example,
-                          args=(example,))  # fmt: skip
     return (url or "").strip()
 
 
@@ -315,11 +357,16 @@ def profile_section(strain: pd.DataFrame) -> None:
         st.html(ui.legend_html([(name, ui.AUTHOR), (REPO_AVERAGE.lower(), ui.REPO)]))
         st.markdown(  # st.html's sanitizer strips SVG; markdown keeps it
             radar_svg(
-                {name: mine, REPO_AVERAGE: repo}, [ui.AUTHOR, ui.REPO], ui.TEXT, ui.MUTED,
-                "#232a33", surface=ui.SURFACE, mono=ui.MONO,
+                {name: mine, REPO_AVERAGE: repo},
+                [ui.AUTHOR, ui.REPO],
+                ui.TEXT,
+                ui.MUTED,
+                "#232a33",
+                surface=ui.SURFACE,
+                mono=ui.MONO,
             ),
             unsafe_allow_html=True,
-        )  # fmt: skip
+        )
         st.html(
             '<div class="cr-legend" style="margin-top:2px;color:var(--faint)">'
             "outer ring = largest value shown</div>"
@@ -345,37 +392,302 @@ def risky_section(result: dict[str, Any]) -> None:
     if not commits:
         st.info("No commits to rank.")
         return
-    cards = [
-        ui.CommitCard(
-            rank=i,
-            subject=c["subject"],
-            author=c["author"],
-            date=c["timestamp"][:10],
-            sha=c["hash"],
-            url=commit_url(result["repo"], c["hash"]),
-            risk=c["risk"],
-            percentile=c["risk_percentile"],
-            band=risk_band(c["risk_percentile"]).replace(" of reference commits by risk", ""),
-            reasons=[
-                ui.Reason(describe_value(r["feature"], r["value"]), r["shap"])
-                for r in c["top_reasons"]
-            ],
-        )
-        for i, c in enumerate(commits, 1)
-    ]
+    cards = [_card(c, i, result["repo"]) for i, c in enumerate(commits, 1)]
     st.html(ui.carousel_html(cards, uid=f"risky-{result.get('slug', 'repo')}"))
 
 
-def main() -> None:
+# --- account view --------------------------------------------------------------------------
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=8)
+def _account(login: str, token: str, max_repos: int) -> dict[str, Any]:
+    return analyze_account(login, Settings(), token=token or None, max_repos=max_repos)
+
+
+def account_inputs() -> tuple[str, str, int, bool]:
+    st.html(
+        ui.page_hero_html(
+            "Your commits,",
+            "beyond the contribution graph.",
+            "GitHub counts your commits. CommitRad shows how they behave across all your "
+            "repositories and forks: which carry the most risk and why, how often a later fix "
+            "traced a bug back to you, how much went through review, when you push, and how "
+            "far your forks have drifted.",
+        )
+    )
+    st.html(
+        ui.note_html(
+            "A token is optional: it unlocks private repositories and 5,000 API requests/hour. It "
+            "stays in this browser session's memory, goes only to github.com, and is never written "
+            "to disk. A read-only, fine-grained token (Contents + Metadata: read) is enough."
+        )
+    )
+    with st.form("account", border=True, enter_to_submit=True):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        login = c1.text_input("GitHub username", placeholder="octocat", key="gh_login")
+        token = c2.text_input(
+            "Token (optional)", type="password", placeholder="github_pat_…", key="gh_token"
+        )
+        max_repos = c3.number_input("Repos", min_value=1, max_value=15, value=6, key="gh_repos")
+        submitted = st.form_submit_button("Analyze account", use_container_width=True)
+    return login.strip(), token.strip(), int(max_repos), submitted
+
+
+def account_view() -> None:
+    login, token, max_repos, submitted = account_inputs()
+    if submitted:
+        st.session_state["gh_active"] = (login, token, max_repos)
+    active = st.session_state.get("gh_active")
+    if not active or not active[0]:
+        st.html(ui.footer_html(_model_note()))
+        return
+    login, token, max_repos = active
+    try:
+        validate_login(login)
+        with st.spinner(f"Cloning and scoring @{login}'s {max_repos} most recently pushed repos…"):
+            data = _account(login, token, max_repos)
+    except InvalidLogin as exc:
+        st.error(str(exc))
+        return
+    except GitHubError as exc:
+        st.error(f"GitHub: {exc}")
+        return
+    st.html(ui.anchor_html("cr-results"))
+    scroll_to("cr-results", f"acct:{login}:{max_repos}:{bool(token)}")
+    account_report(data)
+    st.html(ui.footer_html(_model_note()))
+
+
+def account_report(data: dict[str, Any]) -> None:
+    t = data["totals"]
+    chips: list[tuple[str, str | None]] = [
+        (f"{t['repos_analyzed']} repos analyzed", None),
+        (f"{t['forks']} forks", None),
+        (f"{data['api_calls']} api calls", None),
+    ]
+    st.html(
+        ui.profile_html(data["login"], data["name"], data["avatar_url"], data["profile_url"], chips)
+    )
+    st.html(
+        ui.tiles_html(
+            [
+                ui.Tile("my commits", f"{t['my_commits']:,}", "across analyzed repos"),
+                ui.Tile(
+                    "later fixed",
+                    ui._pct(t["my_bug_rate"]),
+                    f"{t['my_bug_introducing']} traced by szz",
+                ),
+                ui.Tile("via pull request", ui._pct(t["my_via_pr"]), "rest pushed directly"),
+                ui.Tile("off-hours commits", ui._pct(t["my_off_hours"]), "nights + weekends"),
+                ui.Tile(
+                    "pushes · 90 days",
+                    f"{t['pushes_90d']:,}",
+                    f"{t['push_commits_90d']:,} commits pushed",
+                ),
+            ]
+        )
+    )
+    st.html(
+        ui.section_html(
+            1,
+            "Repositories",
+            "Your share of each repo and how your commits compare with everyone's. \"Later "
+            'fixed" is the share of commits a subsequent fix traced a bug back to (SZZ); '
+            "fork drift is commits ahead (↑) and behind (↓) the upstream default branch.",
+        )
+    )
+    st.html(ui.repo_table_html(data["repos"]))
+    if not data["commits"]:
+        st.info(
+            "None of the analyzed commits matched this account's emails. Commits made with an "
+            "email that isn't linked to the GitHub account can't be attributed."
+        )
+        return
+    pushes = pd.DataFrame(data["pushes"])
+    st.html(
+        ui.section_html(
+            2,
+            "Push rhythm",
+            "When you push, from GitHub's last 90 days of public events (UTC). GitHub's own "
+            "contribution graph shows days, not hours.",
+        )
+    )
+    if pushes.empty:
+        st.info("No public push events in the last 90 days.")
+    else:
+        with st.container(border=True, key="chart-pushes"):
+            st.altair_chart(punch_card(pushes), use_container_width=True)
+    if data["strain"]:
+        st.html(
+            ui.section_html(
+                3,
+                "Weekly strain, all repos",
+                "Your weekly strain across every analyzed repo, commit-weighted. Gaps are "
+                "pauses of more than four weeks.",
+            )
+        )
+        weeks = pd.DataFrame(data["strain"])
+        weeks["week"] = pd.to_datetime(weeks["week"])
+        weeks["week_label"] = weeks["week"].dt.strftime("%Y-%m-%d")
+        weeks["run"] = (weeks["week"].diff() > pd.Timedelta(weeks=4)).cumsum()
+        with st.container(border=True, key="chart-account-strain"):
+            st.altair_chart(
+                strain_over_time(weeks, float(weeks["strain"].median())), use_container_width=True
+            )
+    st.html(
+        ui.section_html(
+            4,
+            "Your riskiest commits",
+            "Across all analyzed repos. + raises risk, \u2212 lowers it, weighted in log-odds.",
+        )
+    )
+    cards = [
+        _card(c, i, c["repo_url"], context=c["repo"]) for i, c in enumerate(data["commits"][:5], 1)
+    ]
+    st.html(ui.carousel_html(cards, uid=f"acct-{data['login']}"))
+
+
+def punch_card(pushes: pd.DataFrame) -> alt.TopLevelMixin:
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    grid = pd.DataFrame([(d, h) for d in range(7) for h in range(24)], columns=["weekday", "hour"])
+    counts = pushes.groupby(["weekday", "hour"]).agg(
+        pushes=("commits", "size"), commits=("commits", "sum")
+    )
+    grid = grid.join(counts, on=["weekday", "hour"]).fillna(0)
+    grid["day"] = grid["weekday"].map(lambda d: days[d])
+    hover = alt.selection_point(on="pointerover", clear="pointerout", fields=["day", "hour"])
+    chart = (
+        alt.Chart(grid)
+        .mark_rect(cornerRadius=3)
+        .encode(
+            x=alt.X(
+                "hour:O", title="hour (utc)", axis=alt.Axis(labelAngle=0, ticks=False, domain=False)
+            ),
+            y=alt.Y("day:N", title=None, sort=days, axis=alt.Axis(ticks=False, domain=False)),
+            color=alt.Color(
+                "pushes:Q",
+                title="pushes",
+                scale=alt.Scale(range=["#161b22", *ui.RAMP[2:]]),
+                legend=alt.Legend(
+                    orient="top",
+                    direction="horizontal",
+                    gradientLength=140,
+                    titleOrient="left",
+                    format="d",
+                    tickMinStep=1,
+                ),
+            ),
+            opacity=alt.condition(hover, alt.value(1.0), alt.value(0.35)),
+            tooltip=[
+                alt.Tooltip("day:N", title="day"),
+                alt.Tooltip("hour:O", title="hour (utc)"),
+                alt.Tooltip("pushes:Q", title="pushes"),
+                alt.Tooltip("commits:Q", title="commits"),
+            ],
+        )
+        .add_params(hover)
+        .properties(height=alt.Step(26))
+    )
+    return _style(chart)
+
+
+def _card(c: dict[str, Any], rank: int, repo_url: str, context: str = "") -> ui.CommitCard:
+    return ui.CommitCard(
+        rank=rank,
+        subject=c["subject"],
+        author=c["author"],
+        date=c["timestamp"][:10],
+        sha=c["hash"],
+        url=commit_url(repo_url, c["hash"]),
+        risk=c["risk"],
+        percentile=c["risk_percentile"],
+        band=risk_band(c["risk_percentile"]).replace(" of reference commits by risk", ""),
+        reasons=[
+            ui.Reason(describe_value(r["feature"], r["value"]), r["shap"]) for r in c["top_reasons"]
+        ],
+        context=context,
+    )
+
+
+# --- pre-push view -------------------------------------------------------------------------
+
+
+def prepush_view() -> None:
+    st.html(
+        ui.page_hero_html(
+            "Catch the risky commit,",
+            "before you push it.",
+            "Dashboards tell you about problems after they ship. CommitRad's pre-push check "
+            "scores the commits you are about to push, using your repository's full history, "
+            "and explains each score, so the riskiest change gets a second look first.",
+        )
+    )
+    st.html(ui.section_html(1, "Run a check", "From inside any git repository with an upstream:"))
+    st.html(
+        ui.code_card_html(
+            "terminal",
+            [
+                "$ uv run commitrad check --repo .",
+                "",
+                "commitrad check · 2 unpushed commit(s) vs origin/main",
+                "",
+                "   RISK   PCTL  COMMIT   SUBJECT",
+                "   0.89   98.9  9fa165b  Add retry cache layer",
+                "                + adds 340 lines (+1.78)",
+                "                + author's first commit in this repo (+0.41)",
+                "                - landed through a pull request (-0.12)",
+            ],
+            note="Add --base origin/main to compare against another ref. Takes about a second.",
+        )
+    )
+    st.html(ui.section_html(2, "Install the git hook", "Runs the check on every git push."))
+    st.html(
+        ui.code_card_html(
+            "terminal",
+            [
+                "$ uv run commitrad hook install --repo <repo>                     # warn only",
+                "$ uv run commitrad hook install --repo <repo> --block-above 0.99  # block top 1%",
+                "$ uv run commitrad hook uninstall --repo <repo>",
+            ],
+            note="An existing pre-push hook is never overwritten unless you pass --force. "
+            "Skip the check for one push with git push --no-verify.",
+        )
+    )
+    st.html(
+        ui.section_html(
+            3, "Use it in CI", "Fail a pull-request job when a commit is in the top 1%:"
+        )
+    )
+    st.html(
+        ui.code_card_html(
+            "github actions step",
+            [
+                "- run: >-",
+                "    uv run commitrad check --fail-above 0.99",
+                "    --base origin/${{ github.base_ref }}",
+            ],
+            note="Check out with fetch-depth: 0 so the full history is available.",
+        )
+    )
+    st.html(ui.footer_html(_model_note()))
+
+
+# --- page ----------------------------------------------------------------------------------
+
+
+def repo_view() -> None:
     snapshots = list_snapshots(DEMO_DIR)
-    url = header(snapshots)
+    current = (st.session_state.get(URL_KEY) or "").strip()
+    url = repo_input(collapsed=bool(current))
     if not url:
         st.html(ui.empty_html())
-        st.html(ui.footer_html())
+        st.html(ui.footer_html(_model_note()))
         return
     result = load(url, snapshots)
     if result is None:
         return
+    st.html(ui.anchor_html("cr-results"))
+    scroll_to("cr-results", f"repo:{result.get('slug')}:{result.get('head', '')}")
     strain = strain_frame(result)
     overview(result, strain)
     if strain.empty:
@@ -384,7 +696,17 @@ def main() -> None:
         strain_section(strain)
         profile_section(strain)
     risky_section(result)
-    st.html(ui.footer_html())
+    st.html(ui.footer_html(_model_note()))
+
+
+def main() -> None:
+    mode = nav()
+    if mode == MODES[1]:
+        account_view()
+    elif mode == MODES[2]:
+        prepush_view()
+    else:
+        repo_view()
 
 
 main()
