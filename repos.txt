@@ -1,6 +1,27 @@
-# Small, actively maintained Python repos (a few hundred to ~1.5k commits each).
+# Training set: 16 actively maintained open-source repos in 4 languages.
+# pallets/click, psf/requests and pallets/flask are deliberately left out so they can be
+# analyzed as genuinely unseen (out-of-sample) repositories.
+
+# Python
 https://github.com/jd/tenacity
 https://github.com/pallets/itsdangerous
 https://github.com/pallets/markupsafe
 https://github.com/tartley/colorama
 https://github.com/python-humanize/humanize
+https://github.com/encode/httpx
+https://github.com/python-attrs/attrs
+https://github.com/hynek/structlog
+https://github.com/pallets/jinja
+https://github.com/Textualize/rich
+
+# JavaScript
+https://github.com/expressjs/express
+https://github.com/tj/commander.js
+https://github.com/axios/axios
+
+# Go
+https://github.com/spf13/cobra
+https://github.com/gin-gonic/gin
+
+# Rust
+https://github.com/BurntSushi/ripgrep

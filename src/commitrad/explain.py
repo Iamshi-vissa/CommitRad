@@ -43,6 +43,43 @@ def describe_value(feature: str, value: float | None) -> str:
         "files_touched": lambda: f"touches {_plural(v, 'file')}",
         "file_churn_max": lambda: f"edits a file with {_plural(v, 'line')} of prior churn",
         "file_churn_mean": lambda: f"touched files average {_plural(v, 'line')} of prior churn",
+        "dirs_touched": lambda: f"spans {_plural(v, 'top-level directory')}".replace(
+            "directorys", "directories"
+        ),
+        "change_entropy": lambda: (
+            "change is scattered across its files"
+            if v >= 0.7
+            else "change is concentrated in one place"
+            if v <= 0.3
+            else "change is moderately spread across files"
+        ),
+        "file_prior_authors": lambda: (
+            f"touched files were edited by {_plural(v, 'earlier author')}"
+        ),
+        "file_age_days": lambda: (
+            "touches files created in this commit"
+            if v == 0
+            else f"touched files last changed {_hours(v * 24)} earlier"
+        ),
+        "via_pr": lambda: (
+            "landed through a pull request" if v else "pushed directly, no pull request"
+        ),
+        "pr_size": lambda: (
+            "not part of a multi-commit pull request"
+            if v <= 1
+            else f"part of a {int(v)}-commit pull request"
+        ),
+        "test_file_share": lambda: (
+            "touches no test files" if v == 0 else f"{v:.0%} of touched files are tests"
+        ),
+        "touches_config": lambda: "changes build, CI or config files" if v else "no config changes",
+        "is_revert": lambda: "reverts an earlier commit" if v else "not a revert",
+        "has_coauthor": lambda: "has a co-author" if v else "single author",
+        "author_tenure_days": lambda: (
+            "author's first day in this repo"
+            if v < 1
+            else f"author has been contributing for {_hours(v * 24)}"
+        ),
         "author_prior_commits": lambda: (
             "author's first commit in this repo"
             if v == 0
