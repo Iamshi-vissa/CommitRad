@@ -1,0 +1,6 @@
+# Small, actively maintained Python repos (a few hundred to ~1.5k commits each).
+https://github.com/jd/tenacity
+https://github.com/pallets/itsdangerous
+https://github.com/pallets/markupsafe
+https://github.com/tartley/colorama
+https://github.com/python-humanize/humanize
