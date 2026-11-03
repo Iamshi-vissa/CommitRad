@@ -35,6 +35,25 @@ class GitRepo:
     def remove(self, rel: str) -> None:
         self.git("rm", "-q", rel)
 
+    def move(self, src: str, dst: str) -> None:
+        self.git("mv", src, dst)
+
+    def _env(self, author: str, email: str, date: str) -> dict[str, str]:
+        return {
+            "GIT_AUTHOR_NAME": author,
+            "GIT_AUTHOR_EMAIL": email,
+            "GIT_AUTHOR_DATE": date,
+            "GIT_COMMITTER_NAME": author,
+            "GIT_COMMITTER_EMAIL": email,
+            "GIT_COMMITTER_DATE": date,
+        }
+
+    def merge(self, branch: str, message: str, date: str, author: str = "Alice") -> str:
+        """Create a --no-ff merge commit of ``branch`` into the current branch."""
+        env = self._env(author, f"{author.lower()}@example.com", date)
+        self.git("merge", "--no-ff", "-q", "-m", message, branch, env=env)
+        return self.git("rev-parse", "HEAD")
+
     def commit(
         self,
         message: str,
@@ -44,13 +63,5 @@ class GitRepo:
     ) -> str:
         """Stage everything and commit with a fixed ISO-8601 date; returns the hash."""
         self.git("add", "-A")
-        env = {
-            "GIT_AUTHOR_NAME": author,
-            "GIT_AUTHOR_EMAIL": email,
-            "GIT_AUTHOR_DATE": date,
-            "GIT_COMMITTER_NAME": author,
-            "GIT_COMMITTER_EMAIL": email,
-            "GIT_COMMITTER_DATE": date,
-        }
-        self.git("commit", "-q", "--allow-empty", "-m", message, env=env)
+        self.git("commit", "-q", "--allow-empty", "-m", message, env=self._env(author, email, date))
         return self.git("rev-parse", "HEAD")
