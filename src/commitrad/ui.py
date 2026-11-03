@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
+from typing import Any
 
 from commitrad import __version__
 
@@ -207,6 +208,36 @@ html {{ scroll-behavior:smooth; }}
 .cr-car .arrows label {{ display:none; }}
 .cr-car .count span {{ display:none; font-family:var(--mono); font-size:12px; color:var(--faint); }}
 
+.cr-profile .av {{ width:44px; height:44px; border-radius:50%; border:1px solid var(--border-hi); }}
+.cr-profile .nm strong {{ color:var(--text); font-family:var(--sans); font-weight:600; }}
+.cr-table {{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; background:var(--surface); margin-top:12px; }}
+.cr-table table {{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }}
+.cr-table th {{ text-align:left; font-weight:500; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted); padding:11px 14px; border-bottom:1px solid var(--border); white-space:nowrap; }}
+.cr-table td {{ padding:11px 14px; border-bottom:1px solid #1a2029; color:var(--text); white-space:nowrap; }}
+.cr-table tr:last-child td {{ border-bottom:none; }}
+.cr-table tr {{ transition:background var(--fast) var(--ease); }}
+.cr-table tr:hover td {{ background:var(--raised); }}
+.cr-table .mt {{ color:var(--faint); }}
+.cr-table th .sb {{ font-size:9.5px; letter-spacing:.06em; color:var(--faint); text-transform:none; }}
+.cr-table .tg {{ font-size:10.5px; color:var(--muted); border:1px solid var(--border); border-radius:5px; padding:0 5px; margin-left:8px; }}
+.cr-table .lg {{ font-size:11px; color:var(--faint); margin-left:8px; }}
+.cr-table .dl {{ font-size:11px; margin-left:6px; }}
+.cr-table .dl.hi {{ color:{UP}; }} .cr-table .dl.lo {{ color:{DOWN}; }} .cr-table .dl.eq {{ color:var(--faint); }}
+.cr-table tr.bad td {{ color:var(--faint); }}
+.cr-code {{ border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden; margin-top:12px;
+  transition:border-color var(--fast) var(--ease); }}
+.cr-code:hover {{ border-color:var(--border-hi); }}
+.cr-code .hd {{ font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+  padding:10px 14px; border-bottom:1px solid var(--border); }}
+.cr-code pre {{ margin:0; padding:14px; font-family:var(--mono); font-size:13px; line-height:1.7; color:var(--text);
+  background:#0b0f14; white-space:pre-wrap; }}
+.cr-code p {{ margin:0; padding:10px 14px; font-size:13px; color:var(--muted); border-top:1px solid var(--border); }}
+[data-testid="stButtonGroup"] button {{ font-family:var(--mono); font-size:12.5px; transition:all var(--fast) var(--ease); }}
+[data-testid="stFormSubmitButton"] button {{ font-family:var(--mono); transition:all var(--fast) var(--ease); }}
+[data-testid="stFormSubmitButton"] button:hover {{ transform:translateY(-1px); }}
+[data-testid="stForm"] {{ border-color:var(--border); background:var(--surface); }}
+
 @media (max-width:760px) {{
   .cr-hero h1 {{ font-size:28px; }}
   .cr-grid {{ grid-template-columns:repeat(2, minmax(0,1fr)) !important; }}
@@ -228,6 +259,101 @@ def nav_html(model_note: str) -> str:
         f'<span class="sp"></span><span class="lk opt">{escape(model_note)}</span>'
         f'<a class="lk" href="{PROJECT_URL}" target="_blank" rel="noopener">source ↗</a></div>'
     )
+
+
+def page_hero_html(title: str, subtitle: str, body: str) -> str:
+    return (
+        f'<div class="cr cr-hero"><h1>{escape(title)}<br/><span>{escape(subtitle)}</span></h1>'
+        f"<p>{escape(body)}</p></div>"
+    )
+
+
+def note_html(text: str) -> str:
+    return f'<div class="cr cr-note"><b>NOTE</b><span>{escape(text)}</span></div>'
+
+
+def prompt_html(command: str, arg: str) -> str:
+    return f'<div class="cr-prompt"><b>$</b> {escape(command)} <i>&lt;{escape(arg)}&gt;</i></div>'
+
+
+def anchor_html(anchor_id: str) -> str:
+    return f'<div id="{escape(anchor_id)}" style="scroll-margin-top:12px"></div>'
+
+
+def profile_html(
+    login: str,
+    name: str | None,
+    avatar: str | None,
+    url: str,
+    chips: Sequence[tuple[str, str | None]],
+) -> str:
+    img = f'<img class="av" src="{escape(avatar)}" alt=""/>' if avatar else ""
+    who = f"<strong>{escape(name)}</strong> " if name else ""
+    chip_html = "".join(
+        f'<span class="cr-chip">{f"<span class=dot style=background:{c}></span>" if c else ""}{escape(t)}</span>'
+        for t, c in chips
+    )
+    return (
+        f'<div class="cr cr-repo cr-profile">{img}<span class="nm">{who}'
+        f'<a href="{escape(url)}" target="_blank" rel="noopener">@{escape(login)} ↗</a></span>{chip_html}</div>'
+    )
+
+
+def _pct(x: float | None) -> str:
+    return "—" if x is None else f"{x:.0%}"
+
+
+def _delta(mine: float | None, repo: float | None) -> str:
+    if mine is None or repo is None:
+        return ""
+    d = mine - repo
+    cls = "hi" if d > 0.02 else "lo" if d < -0.02 else "eq"
+    return f' <span class="dl {cls}">{d * 100:+.0f} pts</span>'
+
+
+def repo_table_html(rows: Sequence[dict[str, Any]]) -> str:
+    """The account view's per-repo table (one row per analyzed repo or fork)."""
+    sub = "<br/><span class=sb>mine vs repo</span>"
+    head = (
+        "<tr><th>repository</th><th>commits<br/><span class=sb>mine / all</span></th>"
+        f"<th>later fixed{sub}</th><th>via pr<br/><span class=sb>mine</span></th>"
+        f"<th>off-hours<br/><span class=sb>mine</span></th><th>risk pctl{sub}</th>"
+        "<th>fork drift<br/><span class=sb>vs upstream</span></th></tr>"
+    )
+    body = []
+    for r in rows:
+        tags = '<span class="tg">fork</span>' if r.get("fork") else ""
+        tags += '<span class="tg">private</span>' if r.get("private") else ""
+        lang = f'<span class="lg">{escape(r["language"])}</span>' if r.get("language") else ""
+        name = f'<a href="{escape(r["url"])}" target="_blank" rel="noopener">{escape(r["full_name"])}</a>{tags}{lang}'
+        if r.get("status") != "ok":
+            body.append(
+                f'<tr class="bad"><td>{name}</td><td colspan="6">skipped: {escape(str(r.get("error") or ""))[:140]}</td></tr>'
+            )
+            continue
+        drift = "—"
+        if r.get("parent"):
+            ahead, behind = r.get("ahead_by"), r.get("behind_by")
+            drift = (
+                f'<span title="vs {escape(r["parent"])}">↑{ahead if ahead is not None else "?"} '
+                f"↓{behind if behind is not None else '?'}</span>"
+            )
+        risk = "—" if r.get("my_risk_pct") is None else f"{r['my_risk_pct'] * 100:.0f}"
+        repo_risk = "—" if r.get("repo_risk_pct") is None else f"{r['repo_risk_pct'] * 100:.0f}"
+        body.append(
+            f"<tr><td>{name}</td><td>{r['my_commits']:,} <span class=mt>/ {r['repo_commits']:,}</span></td>"
+            f"<td>{_pct(r.get('my_bug_rate'))} <span class=mt>vs {_pct(r.get('repo_bug_rate'))}</span>"
+            f"{_delta(r.get('my_bug_rate'), r.get('repo_bug_rate'))}</td>"
+            f"<td>{_pct(r.get('my_via_pr'))}</td><td>{_pct(r.get('my_off_hours'))}</td>"
+            f"<td>{risk} <span class=mt>vs {repo_risk}</span></td><td>{drift}</td></tr>"
+        )
+    return f'<div class="cr cr-table"><table>{head}{"".join(body)}</table></div>'
+
+
+def code_card_html(title: str, lines: Sequence[str], note: str = "") -> str:
+    code = "\n".join(escape(x) for x in lines)
+    extra = f"<p>{escape(note)}</p>" if note else ""
+    return f'<div class="cr cr-code"><div class="hd">{escape(title)}</div><pre>{code}</pre>{extra}</div>'
 
 
 def hero_html(disclaimer: str) -> str:
@@ -303,10 +429,10 @@ def legend_html(items: Sequence[tuple[str, str]]) -> str:
     return f'<div class="cr-legend">{spans}</div>'
 
 
-def footer_html() -> str:
+def footer_html(model_note: str = "lightgbm ensemble · szz labels") -> str:
     return (
-        f'<div class="cr cr-foot"><span>commitrad v{escape(__version__)} · lightgbm ensemble · '
-        "szz labels · 17 features</span><span>signals, not judgments</span></div>"
+        f'<div class="cr cr-foot"><span>commitrad v{escape(__version__)} · {escape(model_note)}'
+        "</span><span>signals, not judgments</span></div>"
     )
 
 
@@ -328,6 +454,7 @@ class CommitCard:
     percentile: float
     band: str
     reasons: Sequence[Reason]
+    context: str = ""  # e.g. the repo, in the cross-repo account view
 
 
 def _card_html(c: CommitCard) -> str:
@@ -344,7 +471,8 @@ def _card_html(c: CommitCard) -> str:
     )
     pct = max(0.0, min(1.0, c.percentile))
     return (
-        f'<article class="cr-card"><div class="top"><span>risk rank #{c.rank}</span>'
+        f'<article class="cr-card"><div class="top"><span>risk rank #{c.rank}'
+        f"{(' · ' + escape(c.context)) if c.context else ''}</span>"
         f"<span><b>{escape(c.band)}</b></span></div>"
         f"<h3>{escape(c.subject or '(no message)')}</h3>"
         f'<div class="meta">{escape(c.author)} · {escape(c.date)} · {sha_html}</div>'

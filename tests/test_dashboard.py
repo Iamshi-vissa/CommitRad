@@ -185,24 +185,127 @@ def test_dashboard_renders_demo_snapshot(demo_dir: Path, monkeypatch: pytest.Mon
     assert "@@ why the model flagged it @@" in page
 
 
-def test_example_button_fills_the_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A snapshot keyed by a real example URL shows up as a one-click button."""
-    import gzip
-    import json
-
-    demo = tmp_path / "demo_cache"
-    demo.mkdir()
-    payload = {"repo": "https://github.com/pallets/click", "slug": "pallets__click",
-               "n_commits": 0, "n_bug_introducing_szz": 0, "commits": [], "strain": [],
-               "model": {"test_pr_auc": 0.2, "test_roc_auc": 0.7}}  # fmt: skip
-    with gzip.open(demo / "pallets__click.json.gz", "wt") as fh:
-        json.dump(payload, fh)
-    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo))
+def test_entering_a_repo_collapses_the_intro(
+    demo_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
-    at.button(key="example_click").click().run()
+    assert 'class="cr cr-hero"' in html_of(at) and not at.button  # no example chips
+    at.text_input[0].input(next(iter(list_snapshots(demo_dir)))).run()
+    page = html_of(at)
+    assert 'class="cr cr-hero"' not in page  # results move to the top
+    assert 'id="cr-results"' in page  # scroll target for the smooth scroll
+
+
+def fake_account(
+    login: str, settings: object, token: str | None = None, max_repos: int = 6
+) -> dict:
+    from commitrad.account import AccountResult, RepoSummary
+
+    repo = RepoSummary(
+        "ann/tool",
+        "https://github.com/ann/tool",
+        True,
+        False,
+        "Python",
+        None,
+        parent="up/tool",
+        ahead_by=3,
+        behind_by=9,
+        my_commits=1,
+        repo_commits=4,
+        my_bug_rate=0.5,
+        repo_bug_rate=0.25,
+        my_via_pr=1.0,
+        my_off_hours=0.0,
+        my_risk_pct=0.9,
+        repo_risk_pct=0.5,
+    )
+    commit = {
+        "hash": "abc1234def",
+        "author": "Ann",
+        "author_email": "a@x",
+        "subject": "Add cache",
+        "timestamp": "2026-10-01T00:00:00+00:00",
+        "risk": 0.8,
+        "risk_percentile": 0.99,
+        "via_pr": True,
+        "off_hours": False,
+        "bug_introducing": True,
+        "repo": "ann/tool",
+        "repo_url": "https://github.com/ann/tool",
+        "top_reasons": [
+            {"feature": "lines_added", "value": 300.0, "shap": 1.2, "effect": "raises", "text": ""}
+        ],
+    }
+    out = AccountResult(
+        login,
+        "Ann",
+        None,
+        f"https://github.com/{login}",
+        repos=[repo],
+        commits=[commit],
+        strain=[
+            {
+                "week": "2026-09-28",
+                "n_commits": 1,
+                "strain": 0.4,
+                "components": {"off_hours": 0, "risk": 0.9, "burstiness": 0, "negativity": 0},
+            }
+        ],
+        pushes=[
+            {
+                "at": "2026-10-04T23:00:00+00:00",
+                "weekday": 6,
+                "hour": 23,
+                "repo": "ann/tool",
+                "branch": "main",
+                "commits": 2,
+            }
+        ],
+        api_calls=7,
+    )
+    return out.as_dict()
+
+
+def test_account_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import commitrad.account
+
+    monkeypatch.setattr(commitrad.account, "analyze_account", fake_account)
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(tmp_path / "empty"))
+    at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
+    at.button_group[0].set_value("GitHub account").run()
+    assert "beyond the contribution graph" in html_of(at)
+    at.text_input(key="gh_login").input("ann")  # form: value is sent with the submit
+    at.button[0].click().run()  # the form's submit button
     assert not at.exception
-    assert at.text_input[0].value == "https://github.com/pallets/click"
-    assert "pallets/<strong>click</strong>" in html_of(at)
+    page = html_of(at)
+    assert "@ann" in page and "cr-table" in page and "↑3" in page and "↓9" in page
+    for section in (
+        "Repositories",
+        "Push rhythm",
+        "Weekly strain, all repos",
+        "Your riskiest commits",
+    ):
+        assert section in page
+    assert "risk rank #1 · ann/tool" in page
+
+
+def test_account_mode_rejects_bad_login(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(tmp_path / "empty"))
+    at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
+    at.button_group[0].set_value("GitHub account").run()
+    at.text_input(key="gh_login").input("not a user!")
+    at.button[0].click().run()
+    assert "GitHub username" in at.error[0].value
+
+
+def test_prepush_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(tmp_path / "empty"))
+    at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
+    at.button_group[0].set_value("Pre-push check").run()
+    page = html_of(at)
+    assert "commitrad hook install" in page and "--fail-above 0.99" in page
 
 
 def test_dashboard_without_snapshots_prompts_for_url(
@@ -212,7 +315,6 @@ def test_dashboard_without_snapshots_prompts_for_url(
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
     assert 'class="cr cr-empty"' in html_of(at)
-    assert not at.button  # no example buttons without snapshots
 
 
 def test_dashboard_rejects_bad_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
