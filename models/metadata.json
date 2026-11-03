@@ -1,0 +1,192 @@
+{
+  "features": [
+    "hour",
+    "weekday",
+    "is_night",
+    "is_weekend",
+    "hours_since_prev_commit",
+    "lines_added",
+    "lines_deleted",
+    "files_touched",
+    "file_churn_max",
+    "file_churn_mean",
+    "author_prior_commits",
+    "author_commit_rate_30d",
+    "author_past_bug_rate",
+    "msg_length",
+    "msg_word_count",
+    "msg_vagueness",
+    "msg_sentiment"
+  ],
+  "label_mode": "strict",
+  "best_iterations": [
+    100,
+    4,
+    21,
+    51,
+    4
+  ],
+  "val_start": "2023-01-08T17:23:30+00:00",
+  "test_start": "2024-09-27T05:58:43+00:00",
+  "params": {
+    "objective": "binary",
+    "metric": "auc",
+    "learning_rate": 0.03,
+    "num_leaves": 15,
+    "min_data_in_leaf": 20,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 1,
+    "lambda_l2": 1.0,
+    "seed": 42,
+    "deterministic": true,
+    "force_row_wise": true,
+    "num_threads": 4,
+    "verbose": -1,
+    "scale_pos_weight": 7.549763033175355,
+    "n_seeds": 5
+  },
+  "metrics": {
+    "val": {
+      "lightgbm": {
+        "n": 387,
+        "positives": 11,
+        "positive_rate": 0.028423772609819122,
+        "pr_auc": 0.5148137333135975,
+        "roc_auc": 0.9020793036750484,
+        "precision_at_10pct": 0.20512820512820512
+      },
+      "size_baseline": {
+        "n": 387,
+        "positives": 11,
+        "positive_rate": 0.028423772609819122,
+        "pr_auc": 0.10633016453363073,
+        "roc_auc": 0.7946083172147002,
+        "precision_at_10pct": 0.10256410256410256
+      }
+    },
+    "test": {
+      "lightgbm": {
+        "n": 387,
+        "positives": 24,
+        "positive_rate": 0.06201550387596899,
+        "pr_auc": 0.2214364086283624,
+        "roc_auc": 0.7646923783287419,
+        "precision_at_10pct": 0.1282051282051282,
+        "pr_auc_lo": 0.09759324800404907,
+        "pr_auc_hi": 0.37108896541893993,
+        "roc_auc_lo": 0.6727108281791232,
+        "roc_auc_hi": 0.8427122854561878
+      },
+      "size_baseline": {
+        "n": 387,
+        "positives": 24,
+        "positive_rate": 0.06201550387596899,
+        "pr_auc": 0.13005056555060454,
+        "roc_auc": 0.7257231404958677,
+        "precision_at_10pct": 0.1282051282051282,
+        "pr_auc_lo": 0.07793535171015008,
+        "pr_auc_hi": 0.2454863903690527,
+        "roc_auc_lo": 0.626490061123982,
+        "roc_auc_hi": 0.8104413201789538
+      }
+    }
+  },
+  "sensitivity": {
+    "final": {
+      "n": 387,
+      "positives": 24,
+      "positive_rate": 0.06201550387596899,
+      "pr_auc": 0.1904553454255076,
+      "roc_auc": 0.7784664830119375,
+      "precision_at_10pct": 0.1794871794871795
+    }
+  },
+  "importance": [
+    {
+      "feature": "lines_added",
+      "mean_abs_shap": 0.43610011795995407,
+      "direction": 0.9548697557832536
+    },
+    {
+      "feature": "author_prior_commits",
+      "mean_abs_shap": 0.2921314881340602,
+      "direction": -0.9425981604170889
+    },
+    {
+      "feature": "hour",
+      "mean_abs_shap": 0.14241975650451194,
+      "direction": 0.8969210143937252
+    },
+    {
+      "feature": "files_touched",
+      "mean_abs_shap": 0.11178496154096622,
+      "direction": 0.9067974714541597
+    },
+    {
+      "feature": "file_churn_mean",
+      "mean_abs_shap": 0.10878003127367766,
+      "direction": 0.7540734786467373
+    },
+    {
+      "feature": "msg_length",
+      "mean_abs_shap": 0.08706990835417032,
+      "direction": 0.2153120245950852
+    },
+    {
+      "feature": "file_churn_max",
+      "mean_abs_shap": 0.08705180362095495,
+      "direction": 0.5183563916173399
+    },
+    {
+      "feature": "author_past_bug_rate",
+      "mean_abs_shap": 0.07932162165836079,
+      "direction": 0.7054448963576034
+    },
+    {
+      "feature": "msg_vagueness",
+      "mean_abs_shap": 0.04939362191486321,
+      "direction": -0.9410618405195267
+    },
+    {
+      "feature": "msg_word_count",
+      "mean_abs_shap": 0.04779137733137556,
+      "direction": 0.4630349008046533
+    },
+    {
+      "feature": "author_commit_rate_30d",
+      "mean_abs_shap": 0.022567720825069533,
+      "direction": 0.2418292225404239
+    },
+    {
+      "feature": "hours_since_prev_commit",
+      "mean_abs_shap": 0.020435118199069745,
+      "direction": 0.41351064780311403
+    },
+    {
+      "feature": "weekday",
+      "mean_abs_shap": 0.019296967940274145,
+      "direction": 0.8810534829534973
+    },
+    {
+      "feature": "lines_deleted",
+      "mean_abs_shap": 0.01757886083828406,
+      "direction": 0.9349165094288269
+    },
+    {
+      "feature": "msg_sentiment",
+      "mean_abs_shap": 0.0006237462828538447,
+      "direction": 0.3448860980069023
+    },
+    {
+      "feature": "is_night",
+      "mean_abs_shap": 0.0,
+      "direction": NaN
+    },
+    {
+      "feature": "is_weekend",
+      "mean_abs_shap": 0.0,
+      "direction": NaN
+    }
+  ]
+}

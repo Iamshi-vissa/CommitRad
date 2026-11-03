@@ -8,6 +8,7 @@ dependencies = [
     "pydriller>=2.6",
     "pyarrow>=15",
     "pandas>=2.2",
+    "lightgbm>=4.3",
 ]
 
 [project.optional-dependencies]

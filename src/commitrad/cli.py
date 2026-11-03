@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from commitrad.features import FeatureResult, featurize_repos
+from commitrad.features import FeatureResult, featurize_repos, load_features
 from commitrad.mining import MineResult, mine_repos
 from commitrad.repos import read_repo_list, repo_slug
 from commitrad.szz import LabelResult, label_repos
@@ -16,6 +16,8 @@ DEFAULT_RAW_DIR = Path("data/raw")
 DEFAULT_CLONE_DIR = Path("data/repos")
 DEFAULT_LABELED_DIR = Path("data/labeled")
 DEFAULT_FEATURES_DIR = Path("data/features")
+DEFAULT_MODEL_DIR = Path("models")
+DEFAULT_REPORT = Path("reports/eval.md")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,6 +51,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sentiment backend (auto: HuggingFace if available, else lexicon).",
     )
     feats.add_argument("--force", action="store_true", help="Rebuild repos already on disk.")
+
+    train = sub.add_parser("train", help="Train the risk model (time split) and write the report.")
+    train.add_argument("--features", type=Path, default=DEFAULT_FEATURES_DIR)
+    train.add_argument("--models", type=Path, default=DEFAULT_MODEL_DIR)
+    train.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    train.add_argument(
+        "--labels",
+        choices=["strict", "final"],
+        default="strict",
+        help="strict: train/val labels only use fixes known before the next split starts.",
+    )
     return parser
 
 
@@ -102,6 +115,31 @@ def cmd_features(args: argparse.Namespace) -> int:
     return 1 if any(r.status == "failed" for r in results) else 0
 
 
+def cmd_train(args: argparse.Namespace) -> int:
+    from commitrad.model import run_training, save_model  # heavy import, only when training
+    from commitrad.report import render_report
+
+    features = load_features(args.features)
+    result = run_training(features, args.labels)
+    path = save_model(result, args.models)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(render_report(result, sorted(features["repo"].unique())))
+    for split_name, by_model in result.metrics.items():
+        for model, m in by_model.items():
+            print(
+                f"{split_name:<5} {model:<14} PR-AUC={m['pr_auc']:.3f} ROC-AUC={m['roc_auc']:.3f} "
+                f"P@10%={m['precision_at_10pct']:.3f} (random PR-AUC={m['positive_rate']:.3f})"
+            )
+    t = result.metrics["test"]["lightgbm"]
+    print(f"test PR-AUC 95% CI [{t['pr_auc_lo']:.3f}, {t['pr_auc_hi']:.3f}]")
+    for mode, m in result.sensitivity.items():
+        print(
+            f"sensitivity ({mode} labels): test PR-AUC={m['pr_auc']:.3f} ROC-AUC={m['roc_auc']:.3f}"
+        )
+    print(f"\nmodel -> {path}\nreport -> {args.report}")
+    return 0
+
+
 def cmd_mine(args: argparse.Namespace) -> int:
     sources = load_sources(args.repo_list)
     results = mine_repos(sources, args.out, args.clones, args.workers, args.force)
@@ -121,6 +159,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_label(args)
         if args.command == "features":
             return cmd_features(args)
+        if args.command == "train":
+            return cmd_train(args)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
