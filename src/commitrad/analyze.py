@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+import gzip
 import json
 import re
 import subprocess
 import threading
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -211,3 +213,39 @@ def analyze_repo(url: str, settings: Settings) -> dict[str, Any]:
         tmp.write_text(json.dumps(result))
         tmp.replace(cached)
         return {**result, "cached": False}
+
+
+# --- demo snapshots ----------------------------------------------------------------------
+
+DEMO_DIR = Path("demo_cache")
+
+
+def snapshot_path(slug: str, demo_dir: Path = DEMO_DIR) -> Path:
+    return demo_dir / f"{slug}.json.gz"
+
+
+def save_snapshot(result: dict[str, Any], demo_dir: Path = DEMO_DIR) -> Path:
+    """Gzipped analysis result, so the dashboard can show popular repos instantly."""
+    path = snapshot_path(result["slug"], demo_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {**result, "snapshot_at": datetime.now(UTC).isoformat(timespec="seconds")}
+    payload.pop("cached", None)
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        json.dump(payload, fh)
+    return path
+
+
+def load_snapshot(path: Path) -> dict[str, Any]:
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def list_snapshots(demo_dir: Path = DEMO_DIR) -> dict[str, Path]:
+    """Repo URL -> snapshot file for every pre-computed demo repo."""
+    out = {}
+    for p in sorted(demo_dir.glob("*.json.gz")):
+        with gzip.open(p, "rt", encoding="utf-8") as fh:
+            head = fh.read(400)  # "repo" is the first key; avoid parsing MBs to list
+        start = head.find('"repo": "') + len('"repo": "')
+        out[head[start : head.find('"', start)]] = p
+    return out
