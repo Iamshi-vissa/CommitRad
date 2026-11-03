@@ -7,6 +7,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from commitrad.features import FeatureResult, featurize_repos
 from commitrad.mining import MineResult, mine_repos
 from commitrad.repos import read_repo_list, repo_slug
 from commitrad.szz import LabelResult, label_repos
@@ -14,6 +15,7 @@ from commitrad.szz import LabelResult, label_repos
 DEFAULT_RAW_DIR = Path("data/raw")
 DEFAULT_CLONE_DIR = Path("data/repos")
 DEFAULT_LABELED_DIR = Path("data/labeled")
+DEFAULT_FEATURES_DIR = Path("data/features")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +36,19 @@ def build_parser() -> argparse.ArgumentParser:
     label.add_argument("--out", type=Path, default=DEFAULT_LABELED_DIR, help="Labeled output dir.")
     label.add_argument("--workers", type=int, default=4, help="Parallel worker processes.")
     label.add_argument("--force", action="store_true", help="Re-label repos already on disk.")
+
+    feats = sub.add_parser("features", help="Build per-commit features from labeled commits.")
+    feats.add_argument("repo_list", type=Path, help="Same repo list used for `mine`.")
+    feats.add_argument("--labeled", type=Path, default=DEFAULT_LABELED_DIR, help="Labeled dir.")
+    feats.add_argument("--out", type=Path, default=DEFAULT_FEATURES_DIR, help="Feature output dir.")
+    feats.add_argument("--workers", type=int, default=4, help="Parallel worker processes.")
+    feats.add_argument(
+        "--sentiment",
+        choices=["auto", "lexicon", "hf"],
+        default="auto",
+        help="Sentiment backend (auto: HuggingFace if available, else lexicon).",
+    )
+    feats.add_argument("--force", action="store_true", help="Rebuild repos already on disk.")
     return parser
 
 
@@ -70,6 +85,23 @@ def cmd_label(args: argparse.Namespace) -> int:
     return 1 if len(ok) < len(results) else 0
 
 
+def format_features(r: FeatureResult) -> str:
+    if r.status == "failed":
+        return f"{r.status:<8} {r.slug:<32} {r.error}"
+    backend = f" sentiment={r.sentiment}" if r.sentiment else ""
+    return f"{r.status:<8} {r.slug:<32} rows={r.n_rows}{backend}"
+
+
+def cmd_features(args: argparse.Namespace) -> int:
+    sources = load_sources(args.repo_list)
+    results = featurize_repos(
+        sources, args.labeled, args.out, args.workers, args.sentiment, args.force
+    )
+    for r in results:
+        print(format_features(r))
+    return 1 if any(r.status == "failed" for r in results) else 0
+
+
 def cmd_mine(args: argparse.Namespace) -> int:
     sources = load_sources(args.repo_list)
     results = mine_repos(sources, args.out, args.clones, args.workers, args.force)
@@ -87,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_mine(args)
         if args.command == "label":
             return cmd_label(args)
+        if args.command == "features":
+            return cmd_features(args)
     except (ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
