@@ -41,7 +41,16 @@ DIFF_FEATURES = [
 AUTHOR_FEATURES = ["author_prior_commits", "author_commit_rate_30d", "author_past_bug_rate"]
 MESSAGE_FEATURES = ["msg_length", "msg_word_count", "msg_vagueness", "msg_sentiment"]
 FEATURE_COLUMNS = TIME_FEATURES + DIFF_FEATURES + AUTHOR_FEATURES + MESSAGE_FEATURES
-META_COLUMNS = ["repo", "hash", "author", "author_email", "timestamp", "message", "bug_found_at"]
+META_COLUMNS = [
+    "repo",
+    "hash",
+    "author",
+    "author_email",
+    "timestamp",
+    "tz_offset_minutes",
+    "message",
+    "bug_found_at",
+]
 TARGET = "is_bug_introducing"
 
 GENERIC_WORDS = frozenset(

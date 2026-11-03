@@ -217,6 +217,17 @@ def size_baseline(df: pd.DataFrame) -> np.ndarray:
     return (df["lines_added"] + df["lines_deleted"]).to_numpy(dtype=float)
 
 
+def reference_quantiles(scores: np.ndarray, n: int = 101) -> list[float]:
+    """Fixed reference distribution of model scores, for a repo-independent risk scale."""
+    return np.quantile(scores, np.linspace(0, 1, n)).tolist()
+
+
+def risk_percentile(scores: np.ndarray, quantiles: list[float]) -> np.ndarray:
+    """Map raw risk scores to [0, 1] percentiles of the reference distribution."""
+    q = np.asarray(quantiles, dtype=float)
+    return np.interp(np.asarray(scores, dtype=float), q, np.linspace(0, 1, len(q)))
+
+
 # --- end-to-end ----------------------------------------------------------------------------
 
 
@@ -230,6 +241,7 @@ class TrainResult:
     importance: pd.DataFrame
     params: dict[str, Any] = field(default_factory=dict)
     sensitivity: dict[str, dict[str, float]] = field(default_factory=dict)
+    risk_quantiles: list[float] = field(default_factory=list)
 
 
 def fit_split(split: TimeSplit, labels: dict[str, pd.Series], n_seeds: int = N_SEEDS) -> RiskModel:
@@ -255,7 +267,11 @@ def run_training(
     sensitivity = {other: evaluate(labels["test"], other_model.predict(split.test))}
     importance = shap_importance(model.shap_values(split.test), split.test[FEATURE_COLUMNS])
     params = {**PARAMS, "scale_pos_weight": class_weight(labels["train"]), "n_seeds": n_seeds}
-    return TrainResult(model, split, label_mode, labels, metrics, importance, params, sensitivity)
+    everything = pd.concat([split.train, split.val, split.test])
+    quantiles = reference_quantiles(model.predict(everything))
+    return TrainResult(
+        model, split, label_mode, labels, metrics, importance, params, sensitivity, quantiles
+    )
 
 
 def metadata(result: TrainResult) -> dict[str, Any]:
@@ -270,6 +286,7 @@ def metadata(result: TrainResult) -> dict[str, Any]:
         "metrics": result.metrics,
         "sensitivity": result.sensitivity,
         "importance": result.importance.to_dict(orient="records"),
+        "risk_quantiles": result.risk_quantiles,
     }
 
 

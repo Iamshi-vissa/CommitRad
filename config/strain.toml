@@ -1,0 +1,11 @@
+# Weekly per-author strain score = weighted mean of components, each in [0, 1].
+# Strain is a signal for starting a conversation, not a judgment about a person.
+
+[weights]
+off_hours = 0.30   # share of the week's commits made at night (22:00-06:00) or on weekends
+risk = 0.30        # mean risk percentile of the week's commits (vs. the model's reference)
+burstiness = 0.20  # burstiness of inter-commit gaps (Kim & Jo finite-size), [0, 1]
+negativity = 0.20  # mean negative sentiment of commit messages
+
+[options]
+min_commits_for_burstiness = 3  # fewer commits than this -> burstiness 0
