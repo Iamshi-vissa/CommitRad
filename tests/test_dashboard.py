@@ -14,10 +14,16 @@ from commitrad.dashboard_data import (
     COMPONENTS,
     REPO_AVERAGE,
     author_profile,
+    author_weeks,
     commit_url,
     heatmap_frame,
+    profile_deltas,
+    radar_extent,
     radar_frame,
+    radar_svg,
+    repo_parts,
     risk_band,
+    step_carousel,
     strain_frame,
     top_risky,
     week_axis,
@@ -71,6 +77,48 @@ def test_radar_polygon_closes_and_scales() -> None:
     assert math.hypot(a.iloc[1]["x"], a.iloc[1]["y"]) == pytest.approx(0.5)
 
 
+def test_radar_zooms_to_the_data() -> None:
+    small = {"A": {"off_hours": 0.45, "risk": 0.51, "burstiness": 0.2, "negativity": 0.0}}
+    assert radar_extent(small) == 0.75
+    assert radar_extent({"A": dict.fromkeys(COMPONENTS, 0.0)}) == 0.25
+    assert radar_extent({"A": dict.fromkeys(COMPONENTS, 0.9)}) == 1.0
+    assert radar_extent({"A": dict.fromkeys(COMPONENTS, 0.5)}) == 0.5  # exact quarter kept
+    df = radar_frame(small, extent=0.75)
+    risk = df[(df["component"] == "Commit risk")].iloc[0]
+    assert math.hypot(risk["x"], risk["y"]) == pytest.approx(0.51 / 0.75)
+
+
+def test_radar_svg_labels_values_and_escapes_names() -> None:
+    profiles = {
+        "<Ann & Co>": {"off_hours": 0.45, "risk": 0.51, "burstiness": 0.49, "negativity": 0.01},
+        REPO_AVERAGE: {"off_hours": 0.36, "risk": 0.61, "burstiness": 0.28, "negativity": 0.01},
+    }
+    svg = radar_svg(profiles, ["#0969da", "#bc4c00"], "#111", "#666", "#ddd")
+    assert svg.startswith("<svg") and svg.endswith("</svg>")
+    assert "&lt;Ann &amp; Co&gt;" in svg and "<Ann" not in svg
+    for label in ("Off-hours", "Commit risk", "Burstiness", "Negativity", "0.75", "0.45"):
+        assert label in svg
+    assert svg.count("<title>") == 8  # a tooltip on every point of both shapes
+    assert svg.count("<polygon") == 4 + 2  # 4 rings + 2 shapes
+
+
+def test_author_weeks_breaks_runs_at_long_pauses() -> None:
+    rows = [week("a", d, 1, 0.3) for d in ("2024-01-01", "2024-01-08", "2024-06-03", "2024-06-10")]
+    runs = author_weeks(strain_frame(result_with(rows)), "a@x")["run"].tolist()
+    assert runs == [0, 0, 1, 1]
+
+
+def test_profile_deltas_and_carousel_and_repo_parts() -> None:
+    a = dict.fromkeys(COMPONENTS, 0.5)
+    r = dict.fromkeys(COMPONENTS, 0.2)
+    d = profile_deltas(a, r)
+    assert [x["component"] for x in d] == COMPONENTS and d[0]["delta"] == pytest.approx(0.3)
+    assert [step_carousel(i, 5, 1) for i in (1, 5)] == [2, 1]
+    assert [step_carousel(i, 5, -1) for i in (1, 3)] == [5, 2]
+    assert repo_parts("https://github.com/pallets/click") == ("pallets", "click")
+    assert repo_parts("/tmp/x/demo") == ("", "demo")
+
+
 def test_commit_urls_and_risk_band() -> None:
     assert commit_url("https://github.com/a/b", "abc") == "https://github.com/a/b/commit/abc"
     assert commit_url("https://gitlab.com/a/b", "abc") == "https://gitlab.com/a/b/-/commit/abc"
@@ -116,12 +164,37 @@ def test_dashboard_renders_demo_snapshot(demo_dir: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
+    assert at.selectbox[0].value is None and at.text_input[0].value == ""  # no defaults
+    assert not at.subheader  # nothing analyzed until a repo is chosen
+
+    url = next(iter(list_snapshots(demo_dir)))
+    at.selectbox[0].select(url).run()
+    assert not at.exception
     assert "Signals, not judgments" in at.warning[0].value
     subheaders = [s.value for s in at.subheader]
     assert subheaders == ["Weekly strain", "Strain profile by author", "Top 5 riskiest commits"]
     assert at.metric[0].value == "3"
+    assert "Commit 1 of 3" in [c.value for c in at.caption]
+
+    at.button(key=next(b.key for b in at.button if b.key.endswith("_next"))).click().run()
+    assert "Commit 2 of 3" in [c.value for c in at.caption]
+    prev_key = next(b.key for b in at.button if b.key.endswith("_prev"))
+    at.button(key=prev_key).click().run()
+    at.button(key=prev_key).click().run()
+    assert "Commit 3 of 3" in [c.value for c in at.caption]  # wraps around
     text = " ".join(m.value for m in at.markdown)
     assert "(raises risk)" in text or "(lowers risk)" in text
+
+
+def test_typing_a_url_clears_the_demo_choice(
+    demo_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COMMITRAD_DEMO_DIR", str(demo_dir))
+    at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
+    at.selectbox[0].select(next(iter(list_snapshots(demo_dir)))).run()
+    at.text_input[0].input("http://evil.example.com/x/y").run()
+    assert at.selectbox[0].value is None
+    assert "Invalid repository URL" in at.error[0].value
 
 
 def test_dashboard_without_snapshots_prompts_for_url(
@@ -131,7 +204,7 @@ def test_dashboard_without_snapshots_prompts_for_url(
     at = AppTest.from_file(str(DASHBOARD), default_timeout=60).run()
     assert not at.exception
     assert "Signals, not judgments" in at.warning[0].value
-    assert any("paste a public" in i.value for i in at.info)
+    assert any("Choose a repository" in m.value for m in at.markdown)
 
 
 def test_dashboard_rejects_bad_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
