@@ -1,4 +1,13 @@
-# CommitRad: dashboard by default; API with `docker run ... commitrad serve --host 0.0.0.0`.
+# CommitRad: dashboard by default; API + React UI with `docker run ... commitrad serve --host 0.0.0.0`.
+
+# React UI, built once and copied into the Python image (served by the API at /).
+FROM node:22-slim AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
 FROM python:3.11-slim
 
 # git: PyDriller and SZZ (git blame) shell out to it, and the API clones repos.
@@ -26,6 +35,7 @@ COPY config ./config
 COPY .streamlit ./.streamlit
 COPY models ./models
 COPY demo_cache ./demo_cache
+COPY --from=web /web/dist ./web/dist
 RUN uv sync --frozen --no-dev
 
 RUN useradd --create-home --uid 1000 app && mkdir -p /app/data && chown -R app /app/data

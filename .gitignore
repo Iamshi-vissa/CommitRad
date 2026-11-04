@@ -5,3 +5,6 @@ __pycache__/
 .ruff_cache/
 data/
 *.tmp
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo

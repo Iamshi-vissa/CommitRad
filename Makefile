@@ -1,4 +1,4 @@
-.PHONY: setup test lint format demo precache serve dashboard docker
+.PHONY: setup test lint format demo precache serve dashboard docker web ui
 
 setup:
 	uv sync
@@ -29,6 +29,12 @@ serve:
 
 dashboard:
 	uv run commitrad dashboard
+
+web:
+	cd web && npm ci && npm run build
+
+ui: web
+	uv run commitrad serve
 
 docker:
 	docker build -t commitrad .

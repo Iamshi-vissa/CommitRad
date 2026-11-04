@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url("/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-display: swap; src: url("/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url("/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-display: swap; src: url("/fonts/inter-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: swap; src: url("/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url("/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); }
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-canvas: #0b0f14;
+  --color-surface: #11161d;
+  --color-raised: #161c24;
+  --color-line: #262e39;
+  --color-line-strong: #36404d;
+  --color-ink: #e6edf3;
+  --color-muted: #8b949e;
+  --color-faint: #5d6672;
+  --color-accent: #58a6ff;
+  --color-accent-strong: #1f6feb;
+  --color-warm: #f0883e;
+  --color-up: #ff7b72;
+  --color-down: #3fb950;
+}
+
+@layer base {
+  html { background: var(--color-canvas); color-scheme: dark; scroll-behavior: smooth; }
+  body { @apply bg-canvas text-ink font-sans antialiased; }
+  ::selection { background: rgb(88 166 255 / 0.35); }
+  input::placeholder { color: var(--color-faint); }
+  input[type="range"] { accent-color: var(--color-accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
