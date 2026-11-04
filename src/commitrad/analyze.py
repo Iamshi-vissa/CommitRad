@@ -242,7 +242,7 @@ def snapshot_path(slug: str, demo_dir: Path = DEMO_DIR) -> Path:
 
 
 def save_snapshot(result: dict[str, Any], demo_dir: Path = DEMO_DIR) -> Path:
-    """Gzipped analysis result, so the dashboard can show popular repos instantly."""
+    """Gzipped analysis result, so popular repos open instantly in the UI."""
     path = snapshot_path(result["slug"], demo_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {**result, "snapshot_at": datetime.now(UTC).isoformat(timespec="seconds")}

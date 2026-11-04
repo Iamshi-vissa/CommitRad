@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC
 from functools import partial
@@ -94,10 +94,6 @@ def write_table(table: pa.Table, path: Path) -> int:
     pq.write_table(table, tmp)
     os.replace(tmp, path)
     return table.num_rows
-
-
-def write_parquet(records: Iterable[dict[str, Any]], path: Path) -> int:
-    return write_table(pa.Table.from_pylist(list(records), schema=SCHEMA), path)
 
 
 def mine_table(repo_path: Path) -> pa.Table:
