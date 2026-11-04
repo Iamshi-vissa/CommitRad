@@ -134,3 +134,52 @@ def test_timeout_is_504(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> 
     client = TestClient(create_app(replace(settings, timeout_seconds=0.05)))
     res = get(client, repo="https://github.com/a/b")
     assert res.status_code == 504 and "retry" in res.json()["detail"]
+
+
+def test_snapshot_served_without_cloning(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from commitrad.analyze import save_snapshot
+
+    demo = tmp_path / "demo"
+    save_snapshot({"repo": "https://github.com/o/r", "slug": "o__r", "commits": [1, 2, 3]}, demo)
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("must not clone a pre-computed repo")
+
+    monkeypatch.setattr(api_module, "analyze_repo", boom)
+    client = TestClient(create_app(settings, demo_dir=demo, web_dir=tmp_path / "none"))
+    body = client.get("/analyze", params={"repo": "https://github.com/o/r/", "limit": 2}).json()
+    assert body["slug"] == "o__r"
+    assert body["commits"] == [1, 2]
+    assert "snapshot_at" in body
+
+
+def test_account_endpoint(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    from commitrad.github import RateLimited
+
+    seen: dict[str, Any] = {}
+
+    def fake(login: str, _settings: Settings, token: str | None, max_repos: int) -> dict[str, Any]:
+        seen.update(login=login, token=token, max_repos=max_repos)
+        if login == "limited":
+            raise RateLimited("rate limit reached")
+        return {"login": login, "repos": []}
+
+    monkeypatch.setattr(api_module, "analyze_account", fake)
+    client = TestClient(create_app(settings))
+    headers = {"X-GitHub-Token": "t"}
+    ok = client.get("/account", params={"user": "octo", "repos": 3}, headers=headers)
+    assert ok.json() == {"login": "octo", "repos": []}
+    assert seen == {"login": "octo", "token": "t", "max_repos": 3}
+    assert client.get("/account", params={"user": "limited"}).status_code == 429
+    assert client.get("/account", params={"user": "octo", "repos": 99}).status_code == 422
+
+
+def test_built_ui_served_at_root(settings: Settings, tmp_path: Path) -> None:
+    web = tmp_path / "dist"
+    web.mkdir()
+    (web / "index.html").write_text("<!doctype html><title>CommitRad</title>")
+    client = TestClient(create_app(settings, web_dir=web))
+    assert "CommitRad" in client.get("/").text
+    assert client.get("/health").json()["status"] == "ok"

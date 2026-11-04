@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CommitRad logo">
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.5" fill="#0d1117" stroke="#3d444d" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#4493f8" stroke-width="2" opacity="0.35"/>
+  <circle cx="32" cy="32" r="13" fill="none" stroke="#4493f8" stroke-width="2" opacity="0.6"/>
+  <path d="M32 32 L37.69 10.75 A22 22 0 0 1 53.25 26.31 Z" fill="#4493f8" opacity="0.4"/>
+  <path d="M12 44 L23 37 L35 41 L49.5 24.5" fill="none" stroke="#f0f6fc" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="12" cy="44" r="3.5" fill="#f0f6fc"/>
+  <circle cx="23" cy="37" r="3.5" fill="#f0f6fc"/>
+  <circle cx="35" cy="41" r="3.5" fill="#f0f6fc"/>
+  <circle cx="49.5" cy="24.5" r="6" fill="#db6d28" stroke="#0d1117" stroke-width="2"/>
+</svg>

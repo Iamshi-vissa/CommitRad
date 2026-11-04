@@ -6,3 +6,5 @@ data
 .ruff_cache
 tests
 *.tmp
+web/node_modules
+web/dist

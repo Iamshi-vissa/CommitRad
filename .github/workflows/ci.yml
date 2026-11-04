@@ -37,6 +37,24 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install (locked)
+        run: npm ci
+      - name: Type-check and build
+        run: npm run build
+
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20

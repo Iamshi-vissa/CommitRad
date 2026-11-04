@@ -11,7 +11,7 @@ bug fix, and tells you *why*.
 [![CI](https://github.com/Iamshi-vissa/CommitRad/actions/workflows/ci.yml/badge.svg)](https://github.com/Iamshi-vissa/CommitRad/actions/workflows/ci.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
 ![LightGBM](https://img.shields.io/badge/model-LightGBM-2A78D6)
-![Tests](https://img.shields.io/badge/tests-166%20passing-1BAF7A)
+![Tests](https://img.shields.io/badge/tests-169%20passing-1BAF7A)
 ![Runs locally](https://img.shields.io/badge/runs-locally-555)
 
 [Quick start](#quick-start) · [Dashboard](#the-dashboard) · [Architecture](#architecture) ·
@@ -67,8 +67,24 @@ uv run commitrad hook install --repo . --block-above 0.99    # block pushes in t
 
 <img src="docs/images/pre-push-check.png" alt="Terminal output of commitrad check, showing three commits with risk score, percentile and reasons" width="760">
 
+**React UI** (needs [Node.js](https://nodejs.org/) 18+): the same three views as a React app, with
+the [React Bits](https://reactbits.dev) GradientWaves background. Build it once; the API then serves
+it at `/`.
+
+```bash
+cd web
+npm install
+npm run build
+cd ..
+uv run commitrad serve         # UI at http://localhost:8000, API at /analyze and /account
+```
+
+For live editing, keep `uv run commitrad serve` running and start `npm run dev` in `web/`
+(http://localhost:5173, API calls are proxied to port 8000).
+
 **API:** `uv run commitrad serve`, then
-`GET http://localhost:8000/analyze?repo=https://github.com/pallets/click` (docs at `/docs`).
+`GET http://localhost:8000/analyze?repo=https://github.com/pallets/click` (docs at `/docs`). `GET /account?user=<login>&repos=6` analyzes a GitHub account; pass a token in the
+`X-GitHub-Token` header.
 
 **Docker:** `docker build -t commitrad .`, then `docker run -p 8501:8501 commitrad` for the
 dashboard or `docker run -p 8000:8000 commitrad commitrad serve --host 0.0.0.0` for the API.
@@ -240,7 +256,8 @@ Full report: [`reports/eval.md`](reports/eval.md).
 
 ```
 src/commitrad/     pipeline, model, API, dashboard (one module per stage)
-tests/             166 tests, including the leakage test
+web/               React UI (Vite, TypeScript, Tailwind, React Bits)
+tests/             169 tests, including the leakage test
 config/            strain weights (strain.toml)
 models/            trained model + metadata
 reports/eval.md    full evaluation report
@@ -251,10 +268,11 @@ repos.txt          training repositories
 ## Development
 
 ```bash
-make test      # pytest (166 tests)
+make test      # pytest (169 tests)
 make lint      # ruff check + ruff format --check
 make precache  # rebuild demo_cache/ snapshots
-make docker    # build the image
+make ui        # build the React UI and serve it with the API
+make docker    # build the image (includes the React UI)
 ```
 
 CI runs lint, format check and tests on every push and pull request, and builds the Docker image.
