@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src/commitrad/assets/logo.svg" alt="CommitRad logo" width="96">
+<img src="docs/images/logo.svg" alt="CommitRad logo" width="96">
 
 # CommitRad
 
@@ -11,10 +11,10 @@ bug fix, and tells you *why*.
 [![CI](https://github.com/Iamshi-vissa/CommitRad/actions/workflows/ci.yml/badge.svg)](https://github.com/Iamshi-vissa/CommitRad/actions/workflows/ci.yml)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
 ![LightGBM](https://img.shields.io/badge/model-LightGBM-2A78D6)
-![Tests](https://img.shields.io/badge/tests-169%20passing-1BAF7A)
+![Tests](https://img.shields.io/badge/tests-146%20passing-1BAF7A)
 ![Runs locally](https://img.shields.io/badge/runs-locally-555)
 
-[Quick start](#quick-start) · [Dashboard](#the-dashboard) · [Architecture](#architecture) ·
+[Quick start](#quick-start) · [The UI](#the-ui) · [Architecture](#architecture) ·
 [How it works](#how-it-works) · [Results](#results) · [Limits](#known-limits)
 
 <img src="docs/images/repo-view.png" alt="CommitRad repository view of pallets/click: number tiles and weekly strain heatmap" width="860">
@@ -37,25 +37,31 @@ bug fix, and tells you *why*.
 | Where | What you get |
 |---|---|
 | **Before you push**: `commitrad check`, git pre-push hook, CI step | Your unpushed commits, riskiest first, each with its top 3 reasons. Warn-only by default; optionally block the top 1%. |
-| **Any repository**: dashboard or `GET /analyze` | Every commit scored and explained, the five riskiest in a carousel, and weekly strain per contributor. |
+| **Any repository**: web UI or `GET /analyze` | Every commit scored and explained, the five riskiest in a carousel, and weekly strain per contributor. |
 | **Your GitHub account**: username (+ optional token) | Your commits across all your repos and forks: risk, later-fix rate vs each repo's norm, pull-request share, off-hours share, push rhythm, fork drift. |
 
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/) and git (uv installs Python 3.11 for you).
+Requires [uv](https://docs.astral.sh/uv/), git and [Node.js](https://nodejs.org/) 18+ (uv installs
+Python 3.11 for you).
 
 ```bash
 git clone https://github.com/Iamshi-vissa/CommitRad.git
 cd CommitRad
-uv sync                        # or: make setup
-uv run commitrad dashboard     # or: make dashboard  ->  http://localhost:8501
+uv sync
+cd web
+npm install
+npm run build
+cd ..
+uv run commitrad serve         # or: make ui  ->  http://localhost:8000
 ```
 
 Paste `https://github.com/pallets/click` and press Enter. Click, requests and flask are
 pre-computed and were never used for training, so they open instantly and show genuine predictions.
 
-> **Windows:** if C: is full, use `uv sync --cache-dir D:\uv-cache --link-mode copy`. Always launch
-> from the project folder so the theme in `.streamlit/config.toml` is found.
+> **Windows:** if C: is full, use `uv sync --cache-dir D:\uv-cache --link-mode copy`. If npm warns
+> that install scripts were blocked, the build still works; if it fails on esbuild, run
+> `npm install-scripts approve esbuild @tailwindcss/oxide` and `npm rebuild`.
 
 **Check your commits before pushing**
 
@@ -67,32 +73,18 @@ uv run commitrad hook install --repo . --block-above 0.99    # block pushes in t
 
 <img src="docs/images/pre-push-check.png" alt="Terminal output of commitrad check, showing three commits with risk score, percentile and reasons" width="760">
 
-**React UI** (needs [Node.js](https://nodejs.org/) 18+): the same three views as a React app, with
-the [React Bits](https://reactbits.dev) GradientWaves background. Build it once; the API then serves
-it at `/`.
+**API:** the same server answers
+`GET /analyze?repo=https://github.com/pallets/click` and `GET /account?user=<login>&repos=6`
+(token in the `X-GitHub-Token` header). Interactive docs at `/docs`.
 
-```bash
-cd web
-npm install
-npm run build
-cd ..
-uv run commitrad serve         # UI at http://localhost:8000, API at /analyze and /account
-```
+**Docker:** `docker build -t commitrad .`, then `docker run -p 8000:8000 commitrad`. The image
+builds the UI itself.
 
-For live editing, keep `uv run commitrad serve` running and start `npm run dev` in `web/`
-(http://localhost:5173, API calls are proxied to port 8000).
+## The UI
 
-**API:** `uv run commitrad serve`, then
-`GET http://localhost:8000/analyze?repo=https://github.com/pallets/click` (docs at `/docs`). `GET /account?user=<login>&repos=6` analyzes a GitHub account; pass a token in the
-`X-GitHub-Token` header.
-
-**Docker:** `docker build -t commitrad .`, then `docker run -p 8501:8501 commitrad` for the
-dashboard or `docker run -p 8000:8000 commitrad commitrad serve --host 0.0.0.0` for the API.
-
-## The dashboard
-
-Three views in a dark code-tool UI (Inter and JetBrains Mono are bundled, so it renders offline).
-Every slider and selector changes only what is displayed, never a score.
+A React app (Vite, TypeScript, Tailwind, with the [React Bits](https://reactbits.dev) GradientWaves
+background) in a dark code-tool style. Every slider and selector changes only what is displayed,
+never a score.
 
 | Strain profile | Riskiest commits |
 |---|---|
@@ -102,9 +94,12 @@ Every slider and selector changes only what is displayed, never a score.
 - **Repository:** paste a public GitHub, GitLab or Codeberg URL. Number tiles, weekly strain
   heatmap, strain profile and riskiest commits.
 - **GitHub account:** enter a username, plus a token for private repos and a higher rate limit. The
-  token stays in session memory and is sent only to github.com. A read-only fine-grained token
-  (Contents + Metadata) is enough.
+  token stays in the tab's memory and goes only to your local API, which uses it for github.com.
+  A read-only fine-grained token (Contents + Metadata) is enough.
 - **Pre-push check:** copy-ready commands for the hook and CI.
+
+For live editing, keep `uv run commitrad serve` running and start `npm run dev` in `web/`
+(http://localhost:5173; API calls are proxied to port 8000).
 
 ## Architecture
 
@@ -130,7 +125,7 @@ flowchart TD
     subgraph SURF["Delivery surfaces: one model, three ways in"]
         direction LR
         CK["<b>Pre-push check</b><br/>CLI, git hook, CI<br/><i>check.py</i>"]
-        RV["<b>Repository view</b><br/>dashboard + GET /analyze<br/><i>analyze.py, api.py</i>"]
+        RV["<b>Repository view</b><br/>GET /analyze<br/><i>analyze.py</i>"]
         AV["<b>Account view</b><br/>repos and forks of a user<br/><i>github.py, account.py</i>"]
     end
 
@@ -139,7 +134,7 @@ flowchart TD
     X --> AV
     GH[GitHub REST API] --> AV
     DB --> RV
-    RV --> D["<b>Dashboard</b><br/>Streamlit<br/><i>dashboard.py, ui.py</i>"]
+    RV --> D["<b>Web UI</b><br/>React, served by the API<br/><i>web/, api.py</i>"]
     AV --> D
 ```
 
@@ -151,8 +146,7 @@ flowchart TD
 | Train and evaluate | `commitrad train` | `model.py`, `report.py` |
 | Weekly strain into DuckDB | `commitrad strain` | `strain.py`, `store.py` |
 | Pre-push check / hook | `commitrad check`, `commitrad hook install` | `check.py` |
-| API | `commitrad serve` | `api.py`, `analyze.py` |
-| Dashboard | `commitrad dashboard` | `dashboard.py`, `dashboard_data.py`, `ui.py` |
+| API + web UI | `commitrad serve` | `api.py`, `analyze.py`, `web/` |
 
 `make demo` rebuilds everything from scratch: mine, label, features, train, strain.
 
@@ -255,9 +249,9 @@ Full report: [`reports/eval.md`](reports/eval.md).
 ## Project layout
 
 ```
-src/commitrad/     pipeline, model, API, dashboard (one module per stage)
+src/commitrad/     pipeline, model and API (one module per stage)
 web/               React UI (Vite, TypeScript, Tailwind, React Bits)
-tests/             169 tests, including the leakage test
+tests/             146 tests, including the leakage test
 config/            strain weights (strain.toml)
 models/            trained model + metadata
 reports/eval.md    full evaluation report
@@ -268,7 +262,7 @@ repos.txt          training repositories
 ## Development
 
 ```bash
-make test      # pytest (169 tests)
+make test      # pytest (146 tests)
 make lint      # ruff check + ruff format --check
 make precache  # rebuild demo_cache/ snapshots
 make ui        # build the React UI and serve it with the API

@@ -1,4 +1,4 @@
-# CommitRad: dashboard by default; API + React UI with `docker run ... commitrad serve --host 0.0.0.0`.
+# CommitRad: the API and the React UI it serves, on port 8000.
 
 # React UI, built once and copied into the Python image (served by the API at /).
 FROM node:22-slim AS web
@@ -32,7 +32,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
 COPY config ./config
-COPY .streamlit ./.streamlit
 COPY models ./models
 COPY demo_cache ./demo_cache
 COPY --from=web /web/dist ./web/dist
@@ -41,8 +40,8 @@ RUN uv sync --frozen --no-dev
 RUN useradd --create-home --uid 1000 app && mkdir -p /app/data && chown -R app /app/data
 USER app
 
-EXPOSE 8501 8000
+EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD ["python", "-m", "commitrad.healthcheck"]
 
-CMD ["commitrad", "dashboard", "--host", "0.0.0.0", "--port", "8501"]
+CMD ["commitrad", "serve", "--host", "0.0.0.0", "--port", "8000"]

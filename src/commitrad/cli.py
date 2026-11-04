@@ -71,15 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     strain.add_argument("--config", type=Path, default=DEFAULT_STRAIN_CONFIG)
     strain.add_argument("--db", type=Path, default=DEFAULT_DB)
 
-    pre = sub.add_parser("precache", help="Pre-compute dashboard snapshots for demo repos.")
+    pre = sub.add_parser("precache", help="Pre-compute instant-open snapshots for demo repos.")
     pre.add_argument(
         "urls", nargs="+", help="HTTPS repo URLs, e.g. https://github.com/pallets/flask"
     )
     pre.add_argument("--out", type=Path, default=Path("demo_cache"))
-
-    dash = sub.add_parser("dashboard", help="Launch the Streamlit dashboard.")
-    dash.add_argument("--host", default="127.0.0.1")
-    dash.add_argument("--port", type=int, default=8501)
 
     check = sub.add_parser("check", help="Score your unpushed commits (pre-push risk check).")
     check.add_argument("--repo", type=Path, default=Path("."), help="Repository to check.")
@@ -106,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     hook.add_argument("--force", action="store_true", help="Replace an existing pre-push hook.")
 
-    serve = sub.add_parser("serve", help="Run the HTTP API (GET /analyze?repo=URL).")
+    serve = sub.add_parser("serve", help="Run the API and the React UI (http://localhost:8000).")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     return parser
@@ -211,18 +207,6 @@ def cmd_precache(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_dashboard(args: argparse.Namespace) -> int:
-    import subprocess
-
-    app = Path(__file__).with_name("dashboard.py")
-    cmd = [
-        "streamlit", "run", str(app),
-        "--server.address", args.host, "--server.port", str(args.port),
-        "--server.headless", "true", "--browser.gatherUsageStats", "false",
-    ]  # fmt: skip
-    return subprocess.call([sys.executable, "-m", *cmd])
-
-
 def cmd_check(args: argparse.Namespace) -> int:
     from commitrad.check import check_repo, format_report, should_block
 
@@ -252,6 +236,12 @@ def cmd_hook(args: argparse.Namespace) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from commitrad.api import WEB_DIR
+
+    if (WEB_DIR / "index.html").is_file():
+        print(f"CommitRad UI: http://{args.host}:{args.port}/")
+    else:
+        print("UI not built yet (cd web && npm install && npm run build); serving the API only.")
     uvicorn.run("commitrad.api:app", host=args.host, port=args.port)
     return 0
 
@@ -287,8 +277,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return cmd_hook(args)
         if args.command == "precache":
             return cmd_precache(args)
-        if args.command == "dashboard":
-            return cmd_dashboard(args)
     except (ValueError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

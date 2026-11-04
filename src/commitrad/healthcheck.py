@@ -1,11 +1,11 @@
-"""Container healthcheck: exit 0 if the dashboard or the API answers on localhost."""
+"""Container healthcheck: exit 0 if the API (which also serves the UI) answers on localhost."""
 
 from __future__ import annotations
 
 import sys
 import urllib.request
 
-URLS = ("http://127.0.0.1:8501/_stcore/health", "http://127.0.0.1:8000/health")
+URLS = ("http://127.0.0.1:8000/health",)
 
 
 def healthy(urls: tuple[str, ...] = URLS, timeout: float = 3.0) -> bool:
