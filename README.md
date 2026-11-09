@@ -25,6 +25,14 @@ bug fix, and tells you *why*.
 > deadlines, time zones or personal schedules, and must never be used to evaluate, rank or
 > discipline anyone.
 
+## About
+
+CommitRad looks at a code change and estimates how likely it is to need a bug fix later. It learned
+this from the history of 16 open-source projects: which changes were later fixed, and what those
+changes had in common (size, how many files they touched, how familiar the author was with the
+code, and so on). For every change it gives a score and the three main reasons behind it, so you
+know which commits deserve a closer review. Everything runs on your own machine.
+
 ## Why CommitRad
 
 - **Review attention is the bottleneck.** Most commits are fine; a few cause most of the bugs, and
@@ -39,6 +47,16 @@ bug fix, and tells you *why*.
 | **Before you push**: `commitrad check`, git pre-push hook, CI step | Your unpushed commits, riskiest first, each with its top 3 reasons. Warn-only by default; optionally block the top 1%. |
 | **Any repository**: web UI or `GET /analyze` | Every commit scored and explained, the five riskiest in a carousel, and weekly strain per contributor. |
 | **Your GitHub account**: username (+ optional token) | Your commits across all your repos and forks: risk, later-fix rate vs each repo's norm, pull-request share, off-hours share, push rhythm, fork drift. |
+
+## Tech stack
+
+| Part | Tools |
+|---|---|
+| Mining and labels | Python 3.11, PyDriller, git blame (SZZ) |
+| Model and explanations | LightGBM (with its built-in TreeSHAP), pandas, PyArrow, DuckDB |
+| API and CLI | FastAPI, Uvicorn, argparse CLI, git hooks |
+| Web UI | React, TypeScript, Vite, Tailwind CSS |
+| Tooling | uv, ruff, pytest, Docker, GitHub Actions |
 
 ## Quick start
 
@@ -246,6 +264,16 @@ Full report: [`reports/eval.md`](reports/eval.md).
   review, never discouragement.
 - **Strain is a proxy.** It sees commit times and messages only, not meetings, leave or schedules.
 
+## Status
+
+Working end to end: training pipeline, pre-push check and hook, API, web UI and Docker image, with
+146 passing tests and CI.
+
+Possible next steps:
+- Publish the package so it can be installed with `pip install commitrad` / `uvx commitrad`.
+- Add a license so others know how they may use the code.
+- Support GitLab and Codeberg in the account view (it is GitHub-only today).
+
 ## Project layout
 
 ```
@@ -270,3 +298,7 @@ make docker    # build the image (includes the React UI)
 ```
 
 CI runs lint, format check and tests on every push and pull request, and builds the Docker image.
+
+## License
+
+No license has been added yet, so all rights are reserved by default.
