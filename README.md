@@ -2,7 +2,7 @@
 
 <img src="docs/images/logo.svg" alt="CommitRad logo" width="96">
 
-# <img src="docs/headers/h1-commitrad.svg" alt="COMMITRAD" height="60">
+# COMMITRAD
 
 Warns you which commits are likely to need a bug fix, before you push them, and tells you why.
 
@@ -14,7 +14,7 @@ Warns you which commits are likely to need a bug fix, before you push them, and 
 
 </div>
 
-## <img src="docs/headers/h2-about.svg" alt="ABOUT" height="38">
+## ABOUT
 
 Most commits are fine. A few cause most of the bugs, and they usually look just like the safe ones.
 CommitRad reads a project's git history, learns what risky changes tend to look like, and gives
@@ -27,7 +27,7 @@ you push, from a *git hook*, in CI, or through a small web app.
 > Scores come from commit *metadata* only. They can reflect deadlines, time zones or personal
 > schedules, so please never use them to judge or rank people.
 
-## <img src="docs/headers/h2-features.svg" alt="FEATURES" height="38">
+## FEATURES
 
 - **Pre-push check:** scores your unpushed commits, riskiest first, with reasons
 - **Git hook and CI step:** warns on every push, and can optionally block the riskiest 1%
@@ -36,7 +36,7 @@ you push, from a *git hook*, in CI, or through a small web app.
 - **Account view:** enter a GitHub username to see your commits across all your repos and forks
 - **REST API** with interactive docs at `/docs`
 
-## <img src="docs/headers/h2-how-it-works.svg" alt="HOW IT WORKS" height="38">
+## HOW IT WORKS
 
 1. **Find past bugs.** It looks for commits that fixed something, then uses `git blame` to find the
    earlier commit that wrote the broken lines. Those become the "risky" examples.
@@ -52,7 +52,7 @@ On projects it has never seen, the riskiest 10% of commits it flags contain 3 to
 *bug-introducing* commits than a random 10%. Full numbers and charts are in
 [docs/DETAILS.md](docs/DETAILS.md) and [reports/eval.md](reports/eval.md).
 
-## <img src="docs/headers/h2-architecture.svg" alt="ARCHITECTURE" height="38">
+## ARCHITECTURE
 
 ```mermaid
 flowchart TB
@@ -70,7 +70,7 @@ flowchart TB
 
 Training happens once, offline. After that, the saved model scores commits for the *pre-push* check, the API and the web app.
 
-## <img src="docs/headers/h2-tech-stack.svg" alt="TECH STACK" height="38">
+## TECH STACK
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-000000?style=flat-square&logo=python&logoColor=white" alt="Python">
@@ -96,7 +96,7 @@ Training happens once, offline. After that, the saved model scores commits for t
 | Web app | React, TypeScript, Vite, Tailwind CSS |
 | Tooling | uv, pytest, ruff, Docker, GitHub Actions |
 
-## <img src="docs/headers/h2-getting-started.svg" alt="GETTING STARTED" height="38">
+## GETTING STARTED
 
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11 for you), git and
 [Node.js](https://nodejs.org/) 18+.
@@ -121,7 +121,7 @@ docker run -p 8000:8000 commitrad
 
 On Windows, if your C: drive is full, use `uv sync --cache-dir D:\uv-cache --link-mode copy`.
 
-## <img src="docs/headers/h2-usage.svg" alt="USAGE" height="38">
+## USAGE
 
 Check your own commits before pushing:
 
@@ -142,14 +142,14 @@ GET /account?user=<github-login>&repos=6        (optional token in the X-GitHub-
 
 Retrain everything from scratch with `make demo`.
 
-## <img src="docs/headers/h2-running-the-tests.svg" alt="RUNNING THE TESTS" height="38">
+## RUNNING THE TESTS
 
 ```bash
 make test     # 146 tests, including one that checks no future data leaks into training
 make lint     # ruff check and format check
 ```
 
-## <img src="docs/headers/h2-project-structure.svg" alt="PROJECT STRUCTURE" height="38">
+## PROJECT STRUCTURE
 
 ```
 src/commitrad/   pipeline, model and API, one module per step
@@ -162,7 +162,7 @@ demo_cache/      pre-computed results for click, requests and flask
 docs/            screenshots and the detailed write-up (DETAILS.md)
 ```
 
-## <img src="docs/headers/h2-known-limits.svg" alt="KNOWN LIMITS" height="38">
+## KNOWN LIMITS
 
 - The bug labels come from an automatic method (*SZZ*), so some are wrong. The model learns to agree
   with it, not with the truth.
@@ -172,11 +172,11 @@ docs/            screenshots and the detailed write-up (DETAILS.md)
 - New contributors get higher scores. Give their first changes a careful, friendly review.
 - The account view only finds commits made with an email linked to the GitHub account.
 
-## <img src="docs/headers/h2-status.svg" alt="STATUS" height="38">
+## STATUS
 
 Complete. Training, scoring, the *pre-push* check, the API and the web app all work, and CI runs the
 tests on every push.
 
-## <img src="docs/headers/h2-license.svg" alt="LICENSE" height="38">
+## LICENSE
 
 MIT. See [LICENSE](LICENSE).
